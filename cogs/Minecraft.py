@@ -1,3 +1,4 @@
+from urllib import request
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -23,34 +24,33 @@ class Minecraft(commands.Cog):
     @app_commands.command(name="mc", description="Show status of minecraft server")
     async def minecraft(self, interaction: discord.Interaction):
         """Show status of minecraft server"""
-        url = requests.get(f'https://api.mcsrvstat.us/2/{IP}')
-        text = url.text
-        data = json.loads(text)
-        server_status = data['online']
-
-        if server_status:
-            num_of_players = data['players']['online']
-            if (num_of_players == 0):
-                all_players = "` None `"
-                all_players_list = "` None `"
-            else:
-                all_players = data['players']['uuid']
-                all_players_list = ""
-                for player, uuid in all_players.items():
-                    all_players_list += f'` {player} - {uuid} `\n'
-
-            embed = discord.Embed(title="Minecraft Server Status")
-            embed.add_field(name="Players Online", value=num_of_players)
-            embed.add_field(
-                name="Players", value=all_players_list, inline=False)
-            embed.timestamp = datetime.now()
-            embed.set_footer(text=f'{interaction.user}',
-                             icon_url=interaction.user.avatar)
-            embed.set_image(url="https://external-content.duckduckgo.com/iu/?u=https%3A%2F%2Fvignette.wikia.nocookie.net%2Fstevethetrooper%2Fimages%2F2%2F25%2FThumbnail_minecraft_zps277f5003.png%2Frevision%2Flatest%3Fcb%3D20140102163508&f=1&nofb=1")
-
-            await interaction.response.send_message(embed=embed)
-        else:
+        url = requests.get(
+            f'https://minecraft-api.com/api/ping/{IP}/25565/json')
+        if not url.text.__contains__("players"):
             await interaction.response.send_message("Server is offline")
+        text = json.loads(url.text)
+
+        modpack_name = text['modpackData']['name']
+        minecraft_version = text['version']['name']
+        players_online = text['players']['online']
+        all_players = ""
+        for player in text['players']['sample']:
+            all_players += f'`{player["name"]} - {player["id"]} `\n'
+        if (len(all_players) == 0):
+            all_players = "Nobody online 🥲"
+        embed = discord.Embed(title="Minecraft Server Status")
+        embed.add_field(
+            name="Modpack Name", value=modpack_name, inline=True)
+        embed.add_field(
+            name="Minecraft Version", value=minecraft_version, inline=True)
+        embed.add_field(
+            name=f'Players Online - {players_online}', value=all_players, inline=False)
+        embed.timestamp = datetime.now()
+        embed.set_footer(text=f'{interaction.user}',
+                         icon_url=interaction.user.avatar)
+        embed.set_image(url="https://external-content.duckduckgo.com/iu/?u=https%3A%2F%2Fvignette.wikia.nocookie.net%2Fstevethetrooper%2Fimages%2F2%2F25%2FThumbnail_minecraft_zps277f5003.png%2Frevision%2Flatest%3Fcb%3D20140102163508&f=1&nofb=1")
+
+        await interaction.response.send_message(embed=embed)
 
 
 async def setup(bot: commands.Bot) -> None:

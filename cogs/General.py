@@ -22,7 +22,7 @@ class General(commands.Cog):
         self.bot = bot
 
     @app_commands.command(name="invite", description="Invite me to your discord server")
-    async def invite(self, interaction: discord.Integration):
+    async def invite(self, interaction: discord.Interaction):
         """Invite me to your discord server"""
         button = Button(
             label='Invite', url=f'https://discord.com/api/oauth2/authorize?client_id={self.bot.user.id}&permissions=8&scope=bot', style=ButtonStyle.url)

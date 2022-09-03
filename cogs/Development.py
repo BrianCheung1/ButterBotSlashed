@@ -19,7 +19,7 @@ class Development(commands.Cog):
 
     @app_commands.command(name="reload", description="Reload cogs")
     @app_commands.checks.has_permissions(moderate_members=True)
-    async def reload(self, interaction: discord.interactions) -> None:
+    async def reload(self, interaction: discord.Interaction) -> None:
         """Reload Cogs"""
         for filename in os.listdir('./cogs'):
             if filename.endswith('.py'):
