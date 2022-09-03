@@ -5,6 +5,8 @@ import os
 from dotenv import load_dotenv
 from typing import Literal, Union, NamedTuple, Optional
 from datetime import datetime, timezone
+from discord.ui import Button, View
+from discord import ButtonStyle
 
 load_dotenv()
 GAMES = os.getenv('GAMES')
@@ -31,13 +33,9 @@ class Profile(commands.Cog):
         # .roles gives id and name
         # list compression for only role names
         # convert list to more readable text
-        role_names = [role.name for role in mentionedUser.roles]
-        all_roles = ""
-        count = 0
-        for role in role_names:
-            if role != "@everyone":
-                all_roles += f'`{role} ` '
-                count += 1
+        role_names = [role.mention for role in mentionedUser.roles[1:]]
+        count = len(role_names)
+        all_roles = " ".join(role_names)
         if (len(all_roles)) == 0:
             all_roles = "`None ` "
 
@@ -46,7 +44,16 @@ class Profile(commands.Cog):
             tzinfo=None) - mentionedUser.joined_at.replace(tzinfo=None)).days)
 
         embed = discord.Embed(
-            title=f'Profile of {mentionedUser.name}', color=mentionedUser.accent_color, description=f'ID: {mentionedUser.id}\n#: {mentionedUser.discriminator}')
+            title=f'Profile of {mentionedUser.name}', color=mentionedUser.accent_color)
+        embed.add_field(name="Username",
+                        value=mentionedUser.name, inline=True)
+        embed.add_field(name="Tag",
+                        value=mentionedUser.discriminator, inline=True)
+        if (mentionedUser.display_name != mentionedUser.name):
+            embed.add_field(name="Nickname",
+                            value=mentionedUser.display_name, inline=True)
+        embed.add_field(name="ID",
+                        value=mentionedUser.id, inline=False)
         embed.add_field(name="Creation Date of Account",
                         value=f'{discord.utils.format_dt(mentionedUser.created_at)}', inline=False)
         embed.add_field(name="Joined Date",
@@ -61,7 +68,13 @@ class Profile(commands.Cog):
         embed.timestamp = datetime.now()
         embed.set_footer(text=f'{mentionedUser}',
                          icon_url=mentionedUser.avatar)
-        await interaction.response.send_message(embed=embed)
+
+        view = View()
+        button = Button(
+            label='Download avatar', url=str(mentionedUser.avatar.url), style=ButtonStyle.url)
+        view.add_item(button)
+
+        await interaction.response.send_message(embed=embed, view=view)
 
 
 async def setup(bot: commands.Bot) -> None:

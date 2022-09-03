@@ -17,14 +17,11 @@ class Development(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
 
-    @app_commands.command(
-        name="reload",
-        description="Reload cogs"
-    )
+    @app_commands.command(name="reload", description="Reload cogs")
     @app_commands.checks.has_permissions(moderate_members=True)
     async def reload(self, interaction: discord.interactions) -> None:
         """Reload Cogs"""
-        for filename in os.listdir(f'./cogs'):
+        for filename in os.listdir('./cogs'):
             if filename.endswith('.py'):
                 await self.bot.reload_extension(f'cogs.{filename[:-3]}')
         await interaction.response.send_message("Cogs Reloaded", ephemeral=True)
