@@ -6,7 +6,7 @@ ButterBotSlashed is an open-source discord bot
 
   -  Profile
   -  Minecraft server status
-  -  Games infomration
+  -  Games information
   -  Simple math commands
   -  Logging of messages
 
@@ -30,7 +30,7 @@ python3 main.py
 ## 🖥️  Technologies
 These technologies are required to run the bot.
   
--  [Python 3.10.66](https://www.python.org/downloads/)
+-  [Python 3.10.6](https://www.python.org/downloads/)
 -  [Project Packages](https://github.com/BrianCheung1/ButterBotSlashed/blob/main/requirements.txt)
 
 ## 📝  License
