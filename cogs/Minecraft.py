@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 import requests
 import json
 from datetime import datetime
+from discord.ext import tasks
 
 
 load_dotenv()
@@ -20,6 +21,8 @@ class Minecraft(commands.Cog):
 
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
+        self.minecraft_status = "Offline - Nobody online 🥲"
+        self.my_background_task.start()
 
     @app_commands.command(name="mc", description="Show status of minecraft server")
     async def minecraft(self, interaction: discord.Interaction):
@@ -52,10 +55,27 @@ class Minecraft(commands.Cog):
 
         await interaction.response.send_message(embed=embed)
 
+    @tasks.loop(seconds=300)  # task runs every 60 seconds
+    async def my_background_task(self):
+        url = requests.get(
+            f'https://minecraft-api.com/api/ping/{IP}/25565/json')
+        if not url.text.__contains__("players"):
+            self.minecraft_status = "Minecraft Server - Offline 🥲"
+        else:
+            text = json.loads(url.text)
+            players_online = text['players']['online']
+            self.minecraft_status = f'Minecraft Server - {players_online} players playing'
+        await self.bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=self.minecraft_status))
+
+    @my_background_task.before_loop
+    async def before_my_task(self):
+        await self.bot.wait_until_ready()  # wait until the bot logs in
+
 
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(
         Minecraft(bot),
         guilds=MY_GUILDS
+
     )
     print("Minecraft is Loaded")

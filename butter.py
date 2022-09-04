@@ -21,8 +21,6 @@ CLIENT_ID = os.getenv('ID')
 class MyBot(commands.Bot):
     def __init__(self):
         super().__init__(
-            activity=discord.Activity(
-                type=discord.ActivityType.watching, name="You"),
             command_prefix="`",
             intents=discord.Intents.all(),
             application_id=CLIENT_ID
@@ -45,13 +43,13 @@ class MyBot(commands.Bot):
         print(f'Ping {round(self.latency*1000)}ms')
         print('------')
 
-    @ tasks.loop(seconds=60)  # task runs every 60 seconds
-    async def my_background_task(self):
-        print("test")
+    # @ tasks.loop(seconds=60)  # task runs every 60 seconds
+    # async def my_background_task(self):
+    #     print("test")
 
-    @ my_background_task.before_loop
-    async def before_my_task(self):
-        await self.wait_until_ready()  # wait until the bot logs in
+    # @ my_background_task.before_loop
+    # async def before_my_task(self):
+    #     await self.wait_until_ready()  # wait until the bot logs in
 
 
 bot = MyBot()
