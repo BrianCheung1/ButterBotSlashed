@@ -6,7 +6,7 @@ ButterBotSlashed is an open-source discord bot
 
   -  Profile
   -  Minecraft server status
-  -  Games infomration
+  -  Games information
   -  Simple math commands
   -  Logging of messages
 
