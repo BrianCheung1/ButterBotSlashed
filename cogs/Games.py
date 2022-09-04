@@ -1,3 +1,4 @@
+from re import A
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -40,12 +41,14 @@ class Games(commands.Cog):
         response = requests.get(url)
         soup = BeautifulSoup(response.text, features="html.parser")
 
+        print(soup.find_all("meta"))
         title = soup.find("meta", property="og:title")[
             "content"].replace("on Steam", "")
         description = soup.find("meta", property="og:description")["content"]
         image = soup.find("meta", property="og:image")["content"]
         price = soup.find("meta", itemprop="price")["content"]
         reviews = soup.find("meta", itemprop="reviewCount")["content"]
+        app_id = steam_link.split("/")[4]
 
         embed = discord.Embed(
             title=f'{add} - {title}', color=0x336EFF, url=steam_link)
@@ -58,6 +61,7 @@ class Games(commands.Cog):
                         value=f'{description}', inline=False)
         embed.add_field(name="Price", value=f'{price}', inline=True)
         embed.add_field(name="Reviews", value=f'{reviews}', inline=True)
+        embed.add_field(name="App Id", value=f'{app_id}', inline=True)
         embed.set_image(url=image)
         embed.timestamp = datetime.now()
         embed.set_footer(text=f'{interaction.user}',

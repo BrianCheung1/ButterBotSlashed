@@ -16,8 +16,6 @@ from pyfiglet import figlet_format
 load_dotenv()
 TOKEN = os.getenv('TOKEN')
 CLIENT_ID = os.getenv('ID')
-# list_of_guilds = os.getenv("GUILDS").split(",")
-# MY_GUILDS = [discord.Object(id=int(guild)) for guild in list_of_guilds]
 
 
 class MyBot(commands.Bot):
@@ -34,7 +32,8 @@ class MyBot(commands.Bot):
         for filename in os.listdir('./cogs'):
             if filename.endswith('.py'):
                 await self.load_extension(f'cogs.{filename[:-3]}')
-        # await self.tree.sync(guild=discord.Object(int(os.getenv("GUILDS").split(",")[0])))
+        for guild in self.guilds:
+            await self.tree.sync(guild=discord.Object(int(guild.id)))
         # self.my_background_task.start()
 
     async def on_ready(self):
@@ -46,7 +45,7 @@ class MyBot(commands.Bot):
         print(f'Ping {round(self.latency*1000)}ms')
         print('------')
 
-    @ tasks.loop(seconds = 60)  # task runs every 60 seconds
+    @ tasks.loop(seconds=60)  # task runs every 60 seconds
     async def my_background_task(self):
         print("test")
 
@@ -55,5 +54,5 @@ class MyBot(commands.Bot):
         await self.wait_until_ready()  # wait until the bot logs in
 
 
-bot=MyBot()
+bot = MyBot()
 bot.run(TOKEN)

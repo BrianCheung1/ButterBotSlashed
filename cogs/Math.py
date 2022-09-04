@@ -1,6 +1,8 @@
+from typing import Literal, Optional
 import discord
 from discord import app_commands
 from discord.ext import commands
+from math import sqrt
 
 import os
 from dotenv import load_dotenv
@@ -11,34 +13,40 @@ MY_GUILDS = [discord.Object(id=int(guild)) for guild in list_of_guilds]
 
 
 class Math(commands.Cog):
-    """Math functions"""
+    """Math Functions"""
 
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
 
     @app_commands.command(
-        name="add",
-        description="Adds two numbers together."
+        name="math",
+        description="math operations"
     )
     @app_commands.describe(
-        first_value='The first value you want to add something to',
-        second_value='The value you want to add to the first value',
+        first_value='The first integer',
+        second_value='The second integer',
     )
-    async def add(self, interaction: discord.Interaction, first_value: int, second_value: int):
-        """Adds two numbers together."""
-        await interaction.response.send_message(f'{first_value} + {second_value} = {first_value + second_value}')
+    async def math(self, interaction: discord.Interaction, first_value: float, operation: Literal['+', '-', '*', '/', '^', '√'], second_value: float):
+        """Operations between two values"""
+        answer = ""
+        if operation == '+':
+            answer = first_value + second_value
+        elif operation == '-':
+            answer = first_value - second_value
+        elif operation == "*":
+            answer = first_value * second_value
+        elif operation == "/":
+            answer = first_value / second_value
+        elif operation == "^":
+            answer = first_value ** second_value
+        elif operation == "√":
+            answer = sqrt(first_value)
 
-    @app_commands.command(
-        name="subtract",
-        description="Subtract one number from another."
-    )
-    @app_commands.describe(
-        first_value='The first value you want to be subtracted',
-        second_value='The value you want to subtract from the first value',
-    )
-    async def subtract(self, interaction: discord.Interaction, first_value: int, second_value: int):
-        """Subtract one number from another."""
-        await interaction.response.send_message(f'{first_value} - {second_value} = {first_value-second_value}')
+        answer = '{0:,.17g}'.format(answer)
+        first_value = '{0:,.17g}'.format(first_value)
+        second_value = '{0:,.17g}'.format(second_value)
+        answer_response = f'{first_value} {operation} {second_value} = {answer}'
+        await interaction.response.send_message(answer_response)
 
 
 async def setup(bot: commands.Bot) -> None:
