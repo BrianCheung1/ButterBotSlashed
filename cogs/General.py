@@ -10,6 +10,7 @@ from discord.ui import Button, View
 from discord import ButtonStyle
 
 
+
 load_dotenv()
 list_of_guilds = os.getenv("GUILDS").split(",")
 MY_GUILDS = [discord.Object(id=int(guild)) for guild in list_of_guilds]
@@ -32,6 +33,7 @@ class General(commands.Cog):
         embed = discord.Embed()
         embed.title = f"Click the button below to invite me to your server! \U0001f389"
         await interaction.response.send_message(embed=embed, view=view)
+
 
 
 async def setup(bot: commands.Bot) -> None:

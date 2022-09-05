@@ -10,7 +10,8 @@ from discord.ext import tasks
 import requests
 import json
 from pyfiglet import figlet_format
-
+from discord.app_commands import AppCommandError
+from discord import Interaction
 
 # will first look for a .env file and if it finds one, it will load the environment variables from the file and make them accessible to your project
 load_dotenv()
@@ -42,5 +43,15 @@ class MyBot(commands.Bot):
         print(f'Ping {round(self.latency*1000)}ms')
         print('------')
 
+
 bot = MyBot()
+
+
+# @bot.tree.error
+# async def on_app_command_error(
+#     interaction: Interaction,
+#     error: AppCommandError
+# ):
+#     await interaction.response.send_message(error)
+
 bot.run(TOKEN)

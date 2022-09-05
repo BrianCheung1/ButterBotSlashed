@@ -1,5 +1,4 @@
-
-from threading import stack_size
+from email import message
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -12,6 +11,7 @@ from datetime import datetime
 from discord.ui import Button, View
 from discord import ButtonStyle
 import random
+import re
 
 load_dotenv()
 KEY = os.getenv('TENOR_TOKEN')
@@ -29,7 +29,6 @@ class Gifs(commands.Cog):
     @app_commands.describe(query="Will search tenor api for a gif of your query")
     async def gif(self, interaction: discord.Interaction, query: str):
         """Sends a gif of your query"""
-        # get the top 8 GIFs for the search term
         r = requests.get(
             "https://tenor.googleapis.com/v2/search?q=%s&key=%s&client_key=butter&limit=50" % (query, KEY))
 
@@ -37,14 +36,29 @@ class Gifs(commands.Cog):
 
         if r.status_code == 200:
             # load the GIFs using the urls for the smaller GIF sizes
-            top_20gifs = json.loads(r.content)
+            found_gifs = json.loads(r.content)
             gif_list.extend(media["media_formats"]["gif"]["url"]
-                            for media in top_20gifs["results"])
+                            for media in found_gifs["results"])
             embed = discord.Embed()
             embed.set_image(url=random.choice(gif_list))
             await interaction.response.send_message(embed=embed)
         else:
             await interaction.response.send_message("No gifs were found for your query")
+
+    # limited in function as if the emoji sent isnt in any of the servers the bot is in
+    # the command will fail
+    @app_commands.command(name="enlarge", description="enlarges a gif if its in the server")
+    @app_commands.describe(emoji="type in the emoji you want enlarged")
+    async def enlarge(self, interaction: discord.Interaction, emoji: str):
+        """Enlarges an emoji"""
+        emoji_id = emoji.rsplit(":", 1)[-1].replace(">", "")
+        fixed_emoji = self.bot.get_emoji(int(emoji_id))
+        guild_emojis = [emoji for emoji in interaction.guild.emojis]
+
+        # if (fixed_emoji in guild_emojis):
+        await interaction.response.send_message(fixed_emoji.url)
+        # else:
+        #     await interaction.response.send_message("Emoji not in server")
 
 
 async def setup(bot: commands.Bot) -> None:

@@ -41,6 +41,7 @@ class Development(commands.Cog):
     @app_commands.command(name="ping", description="Shows Bot Latency")
     async def ping(self, interaction: discord.Interaction):
         """Shows Bot Latency"""
+        
         await interaction.response.send_message(f'**Pong**: *{round(self.bot.latency*1000)}ms*')
 
     @app_commands.command(name="sync", description="Syncs commands to all servers")
