@@ -19,7 +19,7 @@ class Errors(commands.Cog):
 
         # -> Option 1 ---
         # setting the handler
-        bot.tree.on_error = self.on_app_command_error
+        #bot.tree.on_error = self.on_app_command_error
 
     # -> Option 1 ---
     # the global error handler for all app commands (slash & ctx menus)
@@ -29,13 +29,14 @@ class Errors(commands.Cog):
         error: AppCommandError
     ):
         if isinstance(error, CommandNotFound):
-            await interaction.response.send_message("No Command Found", ephemeral=True)
+            await interaction.response.send_message("No Command Found - Commands may not be synced - Please do /sync", ephemeral=True)
         elif isinstance(error, MissingPermissions):
             await interaction.response.send_message(f'Missing Permissions - Permissions need {error.missing_permissions}', ephemeral=True)
         elif isinstance(error, CommandOnCooldown):
             await interaction.response.send_message("Command on cooldown, Retry in {:.2f}s".format(error.retry_after), ephemeral=True)
         else:
-            await interaction.response.send_message("Error with Command", ephemeral=True)
+            print(error)
+            await interaction.response.send_message(f'Error with Command - {error}', ephemeral=True)
 
     # -> Option 2 ---
     # the error handler for slash commands in this cog

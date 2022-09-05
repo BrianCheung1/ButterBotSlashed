@@ -41,22 +41,22 @@ class Development(commands.Cog):
     @app_commands.command(name="ping", description="Shows Bot Latency")
     async def ping(self, interaction: discord.Interaction):
         """Shows Bot Latency"""
-        
+
         await interaction.response.send_message(f'**Pong**: *{round(self.bot.latency*1000)}ms*')
 
     @app_commands.command(name="sync", description="Syncs commands to all servers")
     @app_commands.checks.has_permissions(moderate_members=True)
-    @app_commands.checks.cooldown(1, 30, key=lambda i: (i.guild_id, i.user.id))
+    @app_commands.checks.cooldown(1, 300, key=lambda i: (i.guild_id, i.user.id))
     async def sync(self, interaction: discord.Interaction):
         """Syncs commands to all servers"""
         count = 0
         # loops through the servers of the bot
         # reloading the cogs for each server
         # sync the commands for each guild
+        for filename in os.listdir(f'./cogs'):
+            if filename.endswith('.py'):
+                await self.bot.reload_extension(f'cogs.{filename[:-3]}')
         for guild in self.bot.guilds:
-            for filename in os.listdir(f'./cogs'):
-                if filename.endswith('.py'):
-                    await self.bot.reload_extension(f'cogs.{filename[:-3]}')
             await self.bot.tree.sync(guild=discord.Object(int(guild.id)))
             count += 1
         await interaction.response.send_message(f'{count} servers synced')
