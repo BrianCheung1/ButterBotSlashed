@@ -32,7 +32,6 @@ class MyBot(commands.Bot):
                 await self.load_extension(f'cogs.{filename[:-3]}')
         for guild in self.guilds:
             await self.tree.sync(guild=discord.Object(int(guild.id)))
-        # self.my_background_task.start()
 
     async def on_ready(self):
         print('------')
@@ -42,15 +41,6 @@ class MyBot(commands.Bot):
         print(f'Logged in as {self.user} (ID: {self.user.id})')
         print(f'Ping {round(self.latency*1000)}ms')
         print('------')
-
-    # @ tasks.loop(seconds=60)  # task runs every 60 seconds
-    # async def my_background_task(self):
-    #     print("test")
-
-    # @ my_background_task.before_loop
-    # async def before_my_task(self):
-    #     await self.wait_until_ready()  # wait until the bot logs in
-
 
 bot = MyBot()
 bot.run(TOKEN)

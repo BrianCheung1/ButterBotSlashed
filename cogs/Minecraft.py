@@ -37,8 +37,9 @@ class Minecraft(commands.Cog):
         minecraft_version = text['version']['name']
         players_online = text['players']['online']
         all_players = ""
-        for player in text['players']['sample']:
-            all_players += f'`{player["name"]} - {player["id"]} `\n'
+        if (players_online != 0):
+            for player in text['players']['sample']:
+                all_players += f'`{player["name"]} - {player["id"]} `\n'
         if (len(all_players) == 0):
             all_players = "Nobody online 🥲"
         embed = discord.Embed(title="Minecraft Server Status")
@@ -64,7 +65,9 @@ class Minecraft(commands.Cog):
         else:
             text = json.loads(url.text)
             players_online = text['players']['online']
-            self.minecraft_status = f'Minecraft Server - {players_online} players playing'
+            if (players_online != 1):
+                self.minecraft_status = f'Minecraft Server - {players_online} players online'
+            self.minecraft_status = f'Minecraft Server - {players_online} player online'
         await self.bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=self.minecraft_status))
 
     @my_background_task.before_loop
