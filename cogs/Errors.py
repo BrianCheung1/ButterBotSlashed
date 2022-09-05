@@ -29,13 +29,13 @@ class Errors(commands.Cog):
         error: AppCommandError
     ):
         if isinstance(error, CommandNotFound):
-            await interaction.response.send_message("No Command Found")
+            await interaction.response.send_message("No Command Found", ephemeral=True)
         elif isinstance(error, MissingPermissions):
-            await interaction.response.send_message(f'Missing Permissions - Permissions need {error.missing_permissions}')
+            await interaction.response.send_message(f'Missing Permissions - Permissions need {error.missing_permissions}', ephemeral=True)
         elif isinstance(error, CommandOnCooldown):
-            await interaction.response.send_message("Command on cooldown, Retry in {:.2f}s".format(error.retry_after))
+            await interaction.response.send_message("Command on cooldown, Retry in {:.2f}s".format(error.retry_after), ephemeral=True)
         else:
-            await interaction.response.send_message("Error with Command")
+            await interaction.response.send_message("Error with Command", ephemeral=True)
 
     # -> Option 2 ---
     # the error handler for slash commands in this cog
