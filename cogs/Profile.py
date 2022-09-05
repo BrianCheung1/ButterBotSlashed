@@ -7,11 +7,16 @@ from typing import Literal, Union, NamedTuple, Optional
 from datetime import datetime, timezone
 from discord.ui import Button, View
 from discord import ButtonStyle
+from pymongo import MongoClient
 
 load_dotenv()
-GAMES = os.getenv('GAMES')
 list_of_guilds = os.getenv("GUILDS").split(",")
 MY_GUILDS = [discord.Object(id=int(guild)) for guild in list_of_guilds]
+GAMES = os.getenv('GAMES')
+MONGO_URL = os.getenv('ATLAS_URI')
+cluster = MongoClient(MONGO_URL)
+db = cluster["Users"]
+collection = db["UserData"]
 
 
 class Profile(commands.Cog):
@@ -26,14 +31,11 @@ class Profile(commands.Cog):
     async def profile(self, interaction: discord.Interaction, member: Optional[discord.Member]):
         """Shows basic info of a member"""
         if not member:
-            mentionedUser = interaction.user
-        else:
-            mentionedUser = member
-
+            member = interaction.user
         # .roles gives id and name
         # list compression for only role names
         # convert list to more readable text
-        role_names = [role.mention for role in mentionedUser.roles[1:]]
+        role_names = [role.mention for role in member.roles[1:]]
         count = len(role_names)
         all_roles = " ".join(role_names)
         if (len(all_roles) >= 1000):
@@ -43,37 +45,48 @@ class Profile(commands.Cog):
 
         # member joined date - today date to measure total days in server
         days_in_server = abs((datetime.now().replace(
-            tzinfo=None) - mentionedUser.joined_at.replace(tzinfo=None)).days)
+            tzinfo=None) - member.joined_at.replace(tzinfo=None)).days)
 
         embed = discord.Embed(
-            title=f'Profile of {mentionedUser.name}', color=mentionedUser.accent_color)
+            title=f'Profile of {member.name}', color=member.accent_color)
         embed.add_field(name="Username",
-                        value=mentionedUser.name, inline=True)
+                        value=member.name, inline=True)
         embed.add_field(name="Tag",
-                        value=mentionedUser.discriminator, inline=True)
-        if (mentionedUser.display_name != mentionedUser.name):
+                        value=member.discriminator, inline=True)
+        if (member.display_name != member.name):
             embed.add_field(name="Nickname",
-                            value=mentionedUser.display_name, inline=True)
+                            value=member.display_name, inline=True)
         embed.add_field(name="ID",
-                        value=mentionedUser.id, inline=False)
+                        value=member.id, inline=False)
         embed.add_field(name="Creation Date of Account",
-                        value=f'{discord.utils.format_dt(mentionedUser.created_at)}', inline=False)
+                        value=f'{discord.utils.format_dt(member.created_at)}', inline=False)
         embed.add_field(name="Joined Date",
-                        value=f'{discord.utils.format_dt(mentionedUser.joined_at)}', inline=False)
+                        value=f'{discord.utils.format_dt(member.joined_at)}', inline=False)
         embed.add_field(name="Days in Server",
                         value=f'{days_in_server}', inline=True)
         embed.add_field(name="Activity",
-                        value=f'{mentionedUser.activity}', inline=True)
+                        value=f'{member.activity}', inline=True)
+
+        search = {"_id": member.id}
+        if (collection.count_documents(search) == 0):
+            post = {"_id": member.id, "balance": 1000}
+            collection.insert_one(post)
+        user = collection.find(search)
+        for result in user:
+            balance = result["balance"]
+
+        embed.add_field(name="Balance",
+                        value=f'${balance:,}', inline=True)
         embed.add_field(name=f'Roles - {count}',
                         value=f'{all_roles}', inline=False)
-        embed.set_image(url=mentionedUser.display_avatar)
+        embed.set_image(url=member.display_avatar)
         embed.timestamp = datetime.now()
-        embed.set_footer(text=f'{mentionedUser}',
-                         icon_url=mentionedUser.avatar)
+        embed.set_footer(text=f'{member}',
+                         icon_url=member.avatar)
 
         view = View()
         button = Button(
-            label='Download avatar', url=str(mentionedUser.avatar.url), style=ButtonStyle.url)
+            label='Download avatar', url=str(member.display_avatar.url), style=ButtonStyle.url)
         view.add_item(button)
 
         await interaction.response.send_message(embed=embed, view=view)

@@ -1,17 +1,10 @@
-from typing import Optional, Literal
-
 import discord
-from discord import app_commands
 from discord.ext import commands
 import os
 from dotenv import load_dotenv
 from datetime import datetime
 from discord.ext import tasks
-import requests
-import json
 from pyfiglet import figlet_format
-from discord.app_commands import AppCommandError
-from discord import Interaction
 
 # will first look for a .env file and if it finds one, it will load the environment variables from the file and make them accessible to your project
 load_dotenv()

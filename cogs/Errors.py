@@ -1,5 +1,3 @@
-from ftplib import error_perm
-from turtle import color
 import discord
 from discord import Interaction
 from discord.app_commands import AppCommandError, MissingPermissions, CommandNotFound, CommandOnCooldown
