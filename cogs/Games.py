@@ -55,9 +55,7 @@ class Games(commands.Cog):
         response = requests.get(url)
         soup = BeautifulSoup(response.text, features="html.parser")
 
-        print(soup.find_all("meta"))
-        title = soup.find("meta", property="og:title")[
-            "content"].replace("on Steam", "")
+        title = soup.select_one('div[class="apphub_AppName"]').contents[0]
         description = soup.find("meta", property="og:description")["content"]
         image = soup.find("meta", property="og:image")["content"]
         price = soup.find("meta", itemprop="price")["content"]
@@ -82,8 +80,8 @@ class Games(commands.Cog):
                          icon_url=interaction.user.avatar)
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name="gamble", description="Chance to win or lose money")
-    @app_commands.describe(amount="Amount of money you want to gamble")
+    @ app_commands.command(name="gamble", description="Chance to win or lose money")
+    @ app_commands.describe(amount="Amount of money you want to gamble")
     async def gamble(self, interaction: discord.Interaction, amount: Optional[int] = 100):
         view = GamblingButton(interaction, amount)
         search = {"_id": interaction.user.id}
@@ -148,7 +146,7 @@ class GamblingButton(discord.ui.View):
             return False
         return True
 
-    @discord.ui.button(label='Play Again', style=discord.ButtonStyle.red)
+    @ discord.ui.button(label='Play Again', style=discord.ButtonStyle.red)
     async def play_again(self, interaction: discord.Interaction, button: discord.ui.Button):
         search = {"_id": interaction.user.id}
         if (collection.count_documents(search) == 0):
