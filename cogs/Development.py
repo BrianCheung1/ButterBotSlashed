@@ -46,7 +46,7 @@ class Development(commands.Cog):
 
     @app_commands.command(name="sync", description="Syncs commands to all servers")
     @app_commands.checks.has_permissions(moderate_members=True)
-    @app_commands.checks.cooldown(1, 300, key=lambda i: (i.guild_id, i.user.id))
+    @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     async def sync(self, interaction: discord.Interaction):
         """Syncs commands to all servers"""
         count = 0
