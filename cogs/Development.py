@@ -71,6 +71,7 @@ class Development(commands.Cog):
 
             await self.bot.tree.sync()
             await interaction.followup.send(f'{len(self.bot.guilds)} servers synced')
+            
 
 
 async def setup(bot: commands.Bot) -> None:

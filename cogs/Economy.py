@@ -28,6 +28,7 @@ class Economy(commands.Cog):
 
     @app_commands.command(name="give", description="Give users money")
     @app_commands.describe(member="The member you want to give money to", amount="The amount you want to give")
+    @app_commands.checks.has_permissions(moderate_members=True)
     async def give(self, interaction: discord.Interaction, member: Optional[discord.Member], amount: Optional[int] = 1000):
         if not member:
             member = interaction.user

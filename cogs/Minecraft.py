@@ -20,7 +20,7 @@ class Minecraft(commands.Cog):
 
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
-        self.minecraft_status = "Offline - Nobody online 🥲"
+        self.minecraft_status = "Offline - 😔"
         self.my_background_task.start()
 
     @app_commands.command(name="mc", description="Show status of minecraft server")
@@ -60,7 +60,7 @@ class Minecraft(commands.Cog):
         url = requests.get(
             f'https://minecraft-api.com/api/ping/{IP}/25565/json')
         if not url.text.__contains__("players"):
-            self.minecraft_status = "Minecraft Server - Offline 🥲"
+            self.minecraft_status = "Offline - 😔"
         else:
             text = json.loads(url.text)
             players_online = text['players']['online']
