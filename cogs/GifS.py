@@ -60,7 +60,7 @@ class Gifs(commands.Cog):
         # else:
         #     await interaction.response.send_message("Emoji not in server")
 
-    @app_commands.command(name="random-emoji")
+    @app_commands.command(name="random-emoji", description="Button to show random emojis in the server")
     async def random_emoji(self, interaction: discord.Interaction):
         view = Counter()
 

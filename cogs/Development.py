@@ -4,6 +4,7 @@ from discord.ext import commands
 from datetime import datetime
 import os
 from dotenv import load_dotenv
+from typing import Literal, Optional
 
 load_dotenv
 list_of_guilds = os.getenv("GUILDS").split(",")
@@ -18,12 +19,17 @@ class Development(commands.Cog):
 
     @app_commands.command(name="reload", description="Reload cogs")
     @app_commands.checks.has_permissions(moderate_members=True)
-    async def reload(self, interaction: discord.Interaction) -> None:
+    async def reload(self, interaction: discord.Interaction, cog: Optional[Literal["Development", "Economy", "Errors", "Games", "General", "Gifs", "Math", "Minecraft", "Profile", "Test"]] = None) -> None:
         """Reload Cogs"""
-        for filename in os.listdir('./cogs'):
-            if filename.endswith('.py'):
-                await self.bot.reload_extension(f'cogs.{filename[:-3]}')
-        await interaction.response.send_message("Cogs Reloaded", ephemeral=True)
+        await interaction.response.defer()
+        if not cog:
+            for filename in os.listdir('./cogs'):
+                if filename.endswith('.py'):
+                    await self.bot.reload_extension(f'cogs.{filename[:-3]}')
+            await interaction.followup.send("Cogs Reloaded", ephemeral=True)
+        else:
+            await self.bot.reload_extension(f'cogs.{cog.title()}')
+            await interaction.followup.send(f'{cog.title()} Reloaded', ephemeral=True)
 
     @commands.Cog.listener()
     async def on_message(self, message):
@@ -46,19 +52,25 @@ class Development(commands.Cog):
     @app_commands.command(name="sync", description="Syncs commands to all servers")
     @app_commands.checks.has_permissions(moderate_members=True)
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
-    async def sync(self, interaction: discord.Interaction):
+    async def sync(self, interaction: discord.Interaction, server: Optional[Literal["This Server", "All Servers"]] = None):
+        await interaction.response.defer()
         """Syncs commands to all servers"""
-        count = 0
         # loops through the servers of the bot
         # reloading the cogs for each server
         # sync the commands for each guild
-        for filename in os.listdir(f'./cogs'):
-            if filename.endswith('.py'):
-                await self.bot.reload_extension(f'cogs.{filename[:-3]}')
-        for guild in self.bot.guilds:
-            await self.bot.tree.sync(guild=discord.Object(int(guild.id)))
-            count += 1
-        await interaction.response.send_message(f'{count} servers synced')
+        if not server:
+            for filename in os.listdir(f'./cogs'):
+                if filename.endswith('.py'):
+                    await self.bot.reload_extension(f'cogs.{filename[:-3]}')
+            await self.bot.tree.sync(guild=discord.Object(int(interaction.guild.id)))
+            await interaction.followup.send(f'{interaction.guild.name} synced')
+        elif server == "All Server":
+            for filename in os.listdir(f'./cogs'):
+                if filename.endswith('.py'):
+                    await self.bot.reload_extension(f'cogs.{filename[:-3]}')
+
+            await self.bot.tree.sync()
+            await interaction.followup.send(f'{len(self.bot.guilds)} servers synced')
 
 
 async def setup(bot: commands.Bot) -> None:
