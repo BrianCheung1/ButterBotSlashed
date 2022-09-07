@@ -1,0 +1,12 @@
+{
+    "python.linting.pylintEnabled": true,
+    "python.linting.enabled": true,
+    "cSpell.words": [
+        "cooldown",
+        "dotenv",
+        "figlet",
+        "Gifs",
+        "Minecraft",
+        "pyfiglet"
+    ]
+}
