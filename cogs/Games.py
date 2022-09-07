@@ -1,3 +1,4 @@
+import asyncio
 from typing import Optional
 import discord
 from discord import app_commands
@@ -80,45 +81,12 @@ class Games(commands.Cog):
                          icon_url=interaction.user.avatar)
         await interaction.response.send_message(embed=embed)
 
-    @ app_commands.command(name="gamble", description="Chance to win or lose money")
-    @ app_commands.describe(amount="Amount of money you want to gamble")
+    @ app_commands.command(name="gamble", description="Chance to win or lose money - Default $100")
+    @ app_commands.describe(amount="Amount of money you want to gamble - Default $100")
     async def gamble(self, interaction: discord.Interaction, amount: Optional[int] = 100):
         view = GamblingButton(interaction, amount)
-        search = {"_id": interaction.user.id}
-        if (collection.count_documents(search) == 0):
-            post = {"_id": interaction.user.id, "balance": 1000}
-            collection.insert_one(post)
-        user = collection.find(search)
-        win = ""
-        for result in user:
-            balance = result["balance"]
-        if amount > balance:
-            await interaction.response.send_message(f'You only have ${balance:,}')
-        else:
-            bot_number = int(random. randrange(1, 100))
-            member_number = int(random.randrange(1, 100))
-            if (bot_number < member_number):
-                balance += amount
-                collection.update_one({"_id": interaction.user.id}, {
-                    "$set": {"balance": balance}})
-                win = f'Win'
-            elif (bot_number > member_number):
-                balance -= amount
-                collection.update_one({"_id": interaction.user.id}, {
-                    "$set": {"balance": balance}})
-                win = f'Lose'
-            elif (bot_number == member_number):
-                await interaction.response.send_message(f'No Winners, {interaction.user.mention} now has ${balance:,}')
-                return
-            embed = discord.Embed(title="Gambling Details")
-            embed.add_field(name="Bot's Number",
-                            value=bot_number, inline=False)
-            embed.add_field(
-                name=f'{interaction.user}\'s number', value=member_number, inline=False)
-            embed.add_field(name="Results", value=f'{win}')
-            embed.add_field(name="Balance", value=f'${balance:,}')
-
-            await interaction.response.send_message(embed=embed, view=view)
+        embed = gamble_helper(interaction, amount)
+        await interaction.response.send_message(embed=embed, view=view)
 
 
 class GamesList(discord.ui.View):
@@ -141,6 +109,7 @@ class GamblingButton(discord.ui.View):
 
     # this function must return a boolean, or to the very least a truthy/falsey value.
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
+
         if self.interaction.user.id != interaction.user.id:
             await interaction.response.send_message("Please start your own game with /gamble", ephemeral=True)
             return False
@@ -148,40 +117,62 @@ class GamblingButton(discord.ui.View):
 
     @ discord.ui.button(label='Play Again', style=discord.ButtonStyle.red)
     async def play_again(self, interaction: discord.Interaction, button: discord.ui.Button):
-        search = {"_id": interaction.user.id}
-        if (collection.count_documents(search) == 0):
-            post = {"_id": interaction.user.id, "balance": 1000}
-            collection.insert_one(post)
-        user = collection.find(search)
-        win = ""
-        for result in user:
-            balance = result["balance"]
-        if self.amount > balance:
-            await interaction.response.send_message(f'You only have ${balance:,}')
-        else:
-            bot_number = int(random. randrange(1, 100))
-            member_number = int(random.randrange(1, 100))
-            if (bot_number < member_number):
-                balance += self.amount
-                collection.update_one({"_id": interaction.user.id}, {
-                    "$set": {"balance": balance}})
-                win = f'Win'
-            elif (bot_number > member_number):
-                balance -= self.amount
-                collection.update_one({"_id": interaction.user.id}, {
-                    "$set": {"balance": balance}})
-                win = f'Lose'
-            elif (bot_number == member_number):
-                await interaction.response.edit_message(content=f'No Winners, {interaction.user.mention} now has ${balance:,}')
-                return
-            embed = discord.Embed(title="Gambling Details")
-            embed.add_field(name="Bot's Number",
-                            value=bot_number, inline=False)
-            embed.add_field(
-                name=f'{interaction.user}\'s number', value=member_number, inline=False)
-            embed.add_field(name="Results", value=f'{win}')
-            embed.add_field(name="Balance", value=f'${balance:,}')
+        embed = gamble_helper(interaction, self.amount)
         await interaction.response.edit_message(embed=embed, view=self)
+
+
+def gamble_helper(interaction: discord.Interaction, amount: Optional[int]):
+    search = {"_id": interaction.user.id}
+    if (collection.count_documents(search) == 0):
+        post = {"_id": interaction.user.id, "balance": 1000}
+        collection.insert_one(post)
+    user = collection.find(search)
+    win = ""
+    for result in user:
+        balance = result["balance"]
+        prev_balance = balance
+    if amount > balance:
+        embed = discord.Embed(title="Not enough balance",
+                              description=f'${amount:,} bet')
+        embed.add_field(name="Needed Balance",
+                        value=f'${amount:,}', inline=True)
+        embed.add_field(name="Balance",
+                        value=f'${balance:,}', inline=True)
+        return embed
+    else:
+        bot_number = int(random. randrange(1, 100))
+        member_number = int(random.randrange(1, 100))
+        if (bot_number < member_number):
+            balance += amount
+            collection.update_one({"_id": interaction.user.id}, {
+                "$set": {"balance": balance}})
+            win = f'{interaction.user.mention} rolled a higher number'
+        elif (bot_number > member_number):
+            balance -= amount
+            collection.update_one({"_id": interaction.user.id}, {
+                "$set": {"balance": balance}})
+            win = f'Dealer rolled a higher number'
+        elif (bot_number == member_number):
+            win = 'No Winners'
+        embed = discord.Embed(title="Gambling Details",
+                              description=f'${amount:,} bet')
+        embed.add_field(name="Dealer rolled a ",
+                        value=bot_number, inline=False)
+        embed.add_field(
+            name=f'{interaction.user} rolled a', value=member_number, inline=False)
+        embed.add_field(name="Result", value=f'{win}', inline=False)
+        embed.add_field(name="Previous Balance",
+                        value=f'${prev_balance:,}', inline=True)
+        embed.add_field(name="New Balance",
+                        value=f'${balance:,}', inline=True)
+        new_balance = balance-prev_balance
+        if new_balance >= 0:
+            embed.add_field(name="Result",
+                            value=f'+${abs(balance-prev_balance):,}', inline=True)
+        else:
+            embed.add_field(name="Result",
+                            value=f'-${abs(balance-prev_balance):,}', inline=True)
+        return embed
 
 
 async def setup(bot: commands.Bot) -> None:

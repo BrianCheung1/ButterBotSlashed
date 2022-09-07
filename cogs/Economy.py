@@ -45,6 +45,32 @@ class Economy(commands.Cog):
                                   "$set": {"balance": balance}})
             await interaction.response.send_message(f'{member.mention} now has ${balance:,}')
 
+    @app_commands.command(name="leaderboard", description="Richest members of your server")
+    async def leaderboard(self, interaction: discord.Interaction):
+        top_members = {}
+        count = 1
+        for member in interaction.guild.members:
+            print(member)
+            search = {"_id": member.id}
+            if (collection.count_documents(search) != 0):
+                user = collection.find(search)
+                for result in user:
+                    balance = result["balance"]
+                if not member.nick:
+                    top_members[member.name] = balance
+                else:
+                    top_members[member.nick] = balance
+        sorted_top_members = dict(
+            sorted(top_members.items(), key=lambda item: item[1], reverse=True))
+        embed = discord.Embed(title=f'{interaction.guild.name} Leaderboard')
+        for member, balance in sorted_top_members.items():
+            embed.add_field(name=f'{count}. {member}',
+                            value=f'${balance}', inline=False)
+            count += 1
+            if count > 10:
+                break
+        await interaction.response.send_message(embed=embed)
+
 
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(
