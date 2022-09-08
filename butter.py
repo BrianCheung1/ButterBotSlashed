@@ -5,7 +5,7 @@ from pyfiglet import figlet_format
 import discord
 import os
 
-# will first look for a .env file and if it finds one, it will load the environment variables from the file 
+# will first look for a .env file and if it finds one, it will load the environment variables from the file
 # and make them accessible to your project
 load_dotenv()
 TOKEN = os.getenv("TOKEN")

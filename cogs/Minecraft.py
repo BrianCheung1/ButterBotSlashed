@@ -1,4 +1,5 @@
 from datetime import datetime
+from socket import timeout
 from discord import app_commands
 from discord.ext import commands, tasks
 from dotenv import load_dotenv
@@ -55,7 +56,9 @@ class Minecraft(commands.Cog):
 
     @tasks.loop(seconds=300)  # task runs every 60 seconds
     async def my_background_task(self):
-        url = requests.get(f"https://minecraft-api.com/api/ping/{IP}/25565/json")
+        url = requests.get(
+            f"https://minecraft-api.com/api/ping/{IP}/25565/json", timeout=100
+        )
         if not url.text.__contains__("players"):
             self.minecraft_status = "Offline - 😔"
         else:

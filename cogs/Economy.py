@@ -37,6 +37,7 @@ class Economy(commands.Cog):
         member: Optional[discord.Member],
         amount: Optional[int] = 1000,
     ):
+        await interaction.response.defer()
         if not member:
             member = interaction.user
 
@@ -48,21 +49,62 @@ class Economy(commands.Cog):
             for result in user:
                 balance = result["balance"]
             balance += amount
-            collection.update_one(
-                {"_id": interaction.user.id}, {"$set": {"balance": balance}}
-            )
-            await interaction.response.send_message(
-                f"{member.mention} now has ${balance:,}"
-            )
+            collection.update_one({"_id": member.id}, {"$set": {"balance": balance}})
+            await interaction.followup.send(f"{member.mention} now has ${balance:,}")
+
+    @app_commands.command(name="mine", description="Mine ores for money")
+    @app_commands.checks.cooldown(1, 60, key=lambda i: (i.guild_id, i.user.id))
+    async def mine(self, interaction: discord.Interaction):
+        common_blocks = ["dirt", "sand", "cobble"]
+        common_ores = ["coal", "redstone", "lapis lazuli", "copper"]
+        uncommon_ores = ["iron", "gold", "nether quartz"]
+        rare_ores = ["diamond", "emerald"]
+        epic_ores = ["ancient debris"]
+
+        search = {"_id": interaction.user.id}
+        if collection.count_documents(search) == 0:
+            post = {"_id": interaction.user.id, "balance": 1000}
+            collection.insert_one(post)
+        user = collection.find(search)
+        for result in user:
+            balance = result["balance"]
+            prev_balance = balance
+
+        await interaction.response.defer()
+        choice = random.randint(0, 100)
+        mining_result = ""
+        if choice < 20:
+            balance += random.randint(1, 20)
+            mining_result = random.choice(common_blocks)
+        if choice >= 20 and choice < 60:
+            balance += random.randint(20, 40)
+            mining_result = random.choice(common_ores)
+        if choice >= 60 and choice < 80:
+            balance += random.randint(40, 60)
+            mining_result = random.choice(uncommon_ores)
+        if choice >= 80 and choice < 95:
+            balance += random.randint(60, 80)
+            mining_result = random.choice(rare_ores)
+        if choice > 95:
+            balance += random.randint(100, 150)
+            mining_result = random.choice(epic_ores)
+
+        collection.update_one(
+            {"_id": interaction.user.id}, {"$set": {"balance": balance}}
+        )
+
+        await interaction.followup.send(
+            f"{interaction.user.mention} found {mining_result}, it's worth ${balance-prev_balance}"
+        )
 
     @app_commands.command(
         name="leaderboard", description="Richest members of your server"
     )
     async def leaderboard(self, interaction: discord.Interaction):
+        await interaction.response.defer()
         top_members = {}
         count = 1
         for member in interaction.guild.members:
-            print(member)
             search = {"_id": member.id}
             if collection.count_documents(search) != 0:
                 user = collection.find(search)
@@ -83,7 +125,7 @@ class Economy(commands.Cog):
             count += 1
             if count > 10:
                 break
-        await interaction.response.send_message(embed=embed)
+        await interaction.followup.send(embed=embed)
 
 
 async def setup(bot: commands.Bot) -> None:

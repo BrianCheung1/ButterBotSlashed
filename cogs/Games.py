@@ -1,5 +1,3 @@
-from dis import disco
-from re import S
 from bs4 import BeautifulSoup
 from datetime import datetime
 from discord import app_commands
@@ -33,12 +31,13 @@ class Games(commands.Cog):
         name="games", description="Provide the google sheet links to games"
     )
     async def games(self, interaction: discord.Interaction):
+        
         """Provide the google sheet links to games"""
         view = GamesList()
         await interaction.response.send_message(
-            f"Games Channel: <#629459633031086080>", view=view
+            f'Games Channel: <#629459633031086080>', view=view
         )
-
+        
     @app_commands.command(name="add_game", description="add a game to games channel")
     @app_commands.describe(
         add="Adding or Updating a game",
@@ -99,9 +98,10 @@ class Games(commands.Cog):
     async def gamble(
         self, interaction: discord.Interaction, amount: Optional[int] = 100
     ):
+        await interaction.response.defer()
         view = GamblingButton(interaction, amount)
         embed = gamble_helper(interaction, amount)
-        await interaction.response.send_message(embed=embed, view=view)
+        await interaction.followup.send(embed=embed, view=view)
 
     @app_commands.command(
         name="blackjack", description="Starts a game of blackjack with the dealer"
@@ -110,6 +110,7 @@ class Games(commands.Cog):
     async def blackjack(
         self, interaction: discord.Interaction, amount: Optional[int] = 100
     ):
+        await interaction.response.defer()
         prev_balance, balance = balance_of_player(interaction)
         if amount > balance:
             embed = discord.Embed(
@@ -117,9 +118,14 @@ class Games(commands.Cog):
             )
             embed.add_field(name="Needed Balance", value=f"${amount:,}", inline=True)
             embed.add_field(name="Balance", value=f"${balance:,}", inline=True)
-            await interaction.response.send_message(embed=embed)
+            await interaction.followup.send(embed=embed)
 
         else:
+            prev_balance += amount
+            balance -= amount
+            collection.update_one(
+                {"_id": interaction.user.id}, {"$set": {"balance": balance}}
+            )
             embed = discord.Embed(title="Blackjack")
             card1 = random_card()
             dealer_cards = [[card1[1], "⬛"], card1[0]]
@@ -152,6 +158,8 @@ class Games(commands.Cog):
                     inline=False,
             )
             if(player_cards[0][0] == "🇦" or player_cards[0][1] == "🇦") and (player_cards[0][0] in ["🔟", "🇯", "🇶", "🇰"] or player_cards[0][1] in ["🔟", "🇯", "🇶", "🇰"]):
+                prev_balance += amount
+                balance += amount
                 balance += amount * 1.5
                 collection.update_one(
                     {"_id": interaction.user.id}, {"$set": {"balance": balance}}
@@ -160,11 +168,10 @@ class Games(commands.Cog):
                 embed.add_field(name="Prev Balance", value = f'${prev_balance:,}', inline=True)
                 embed.add_field(name="New Balance", value = f'${balance:,}', inline=True)
                 embed.add_field(name="Result", value = f'${balance-prev_balance:,}', inline=True)
-                await interaction.response.send_message(embed=embed)
+                await interaction.followup.send(embed=embed)
             else:
                 view = BlackjackButton(dealer_cards, player_cards, embed, interaction, amount)
-                await interaction.response.send_message(embed=embed, view=view)
-
+                await interaction.followup.send(embed=embed, view=view)
 
 class GamesList(discord.ui.View):
     def __init__(self):
@@ -176,7 +183,6 @@ class GamesList(discord.ui.View):
         # Therefore we have to manually create one.
         # We add the quoted url to the button, and add the button to the view.
         self.add_item(discord.ui.Button(label="List Of Games", url=url))
-
 
 class GamblingButton(discord.ui.View):
     def __init__(self, interaction: discord.Interaction, amount: Optional[int]):
@@ -200,7 +206,6 @@ class GamblingButton(discord.ui.View):
     ):
         embed = gamble_helper(interaction, self.amount)
         await interaction.response.edit_message(embed=embed, view=self)
-
 
 class BlackjackButton(discord.ui.View):
     def __init__(
@@ -227,7 +232,7 @@ class BlackjackButton(discord.ui.View):
         return True
 
     @discord.ui.button(label="Hit", style=discord.ButtonStyle.green)
-    async def hit(self, interaction: discord.Interaction, button: discord.ui.Button, amount: Optional[int] = 100):
+    async def hit(self, interaction: discord.Interaction, button: discord.ui.Button):
         prev_balance, balance = balance_of_player(interaction)
         await interaction.response.defer()
         new_card = random_card()
@@ -250,7 +255,7 @@ class BlackjackButton(discord.ui.View):
         if self.player_cards[1] > 21:
             button.disabled = True
             self.stay.disabled = True
-            balance -= amount
+            prev_balance += self.amount
             collection.update_one(
                 {"_id": interaction.user.id}, {"$set": {"balance": balance}}
             )
@@ -271,8 +276,13 @@ class BlackjackButton(discord.ui.View):
         await interaction.response.defer()
         await self.result(interaction, button)
 
-    async def result(self, interaction: discord.Interaction, button: discord.ui.Button, amount: Optional[int] = 100):
+    async def result(self, interaction: discord.Interaction, button: discord.ui.Button):
         prev_balance, balance = balance_of_player(interaction)
+        prev_balance += self.amount
+        balance += self.amount
+        collection.update_one(
+                {"_id": interaction.user.id}, {"$set": {"balance": balance}}
+            )
         self.hit.disabled = True
         self.stay.disabled = True
         while self.dealer_cards[1] <= 16:
@@ -295,51 +305,78 @@ class BlackjackButton(discord.ui.View):
             )
         if self.dealer_cards[1] > 21:
             self.embed.add_field(name="Result", value="Win", inline=False)
-            balance += amount
+            balance += self.amount
             collection.update_one(
                 {"_id": interaction.user.id}, {"$set": {"balance": balance}}
             )
         elif "🇦" in self.player_cards[0] and "🇦" not in self.dealer_cards[0]:
             if(self.player_cards[1] + 10 > self.dealer_cards[1] and self.player_cards[1]+10 <= 21):
                 self.embed.add_field(name="Result", value="Win", inline=False)
-                balance += amount
+                balance += self.amount
                 collection.update_one(
                     {"_id": interaction.user.id}, {"$set": {"balance": balance}}
                 )
             elif(self.player_cards[1] + 10 < self.dealer_cards[1] and self.player_cards[1]+10 <= 21):
                 self.embed.add_field(name="Result", value="Lose", inline=False)
-                balance -= amount
+                balance -= self.amount
                 collection.update_one(
                     {"_id": interaction.user.id}, {"$set": {"balance": balance}}
                 )
             elif(self.player_cards[1] + 10 == self.dealer_cards[1] and self.player_cards[1]+10 <= 21):
                 self.embed.add_field(name="Result", value="Tie", inline=False)
+            elif(self.player_cards[1] > self.dealer_cards[1]):
+                self.embed.add_field(name="Result", value="Win", inline=False)
+                balance += self.amount
+                collection.update_one(
+                    {"_id": interaction.user.id}, {"$set": {"balance": balance}}
+                )
+            elif(self.player_cards[1] < self.dealer_cards[1]):
+                self.embed.add_field(name="Result", value="Lose", inline=False)
+                balance -= self.amount
+                collection.update_one(
+                    {"_id": interaction.user.id}, {"$set": {"balance": balance}}
+                )
+            elif(self.player_cards[1] == self.dealer_cards[1]):
+                self.embed.add_field(name="Result", value="Tie", inline=False)
         elif "🇦" in self.dealer_cards[0] and "🇦" not in self.player_cards[0]:
             if(self.dealer_cards[1] + 10 > self.player_cards[1] and self.dealer_cards[1]+10 <= 21):
                 self.embed.add_field(name="Result", value="Lose", inline=False)
-                balance -= amount
+                balance -= self.amount
                 collection.update_one(
                     {"_id": interaction.user.id}, {"$set": {"balance": balance}}
                 )
             elif(self.dealer_cards[1] + 10 < self.player_cards[1] and self.dealer_cards[1]+10 <= 21):
-                self.embed.add_field(name="Result", value="Lose", inline=False)
-                balance -= amount
+                self.embed.add_field(name="Result", value="Win", inline=False)
+                balance += self.amount
                 collection.update_one(
                     {"_id": interaction.user.id}, {"$set": {"balance": balance}}
                 )
             elif(self.dealer_cards[1] + 10 == self.player_cards[1] and self.dealer_cards[1]+10 <= 21):
                 self.embed.add_field(name="Result", value="Tie", inline=False)
+            elif(self.dealer_cards[1] > self.player_cards[1]):
+                self.embed.add_field(name="Result", value="Lose", inline=False)
+                balance -= self.amount
+                collection.update_one(
+                    {"_id": interaction.user.id}, {"$set": {"balance": balance}}
+                )
+            elif(self.dealer_cards[1]  < self.player_cards[1]):
+                self.embed.add_field(name="Result", value="Win", inline=False)
+                balance += self.amount
+                collection.update_one(
+                    {"_id": interaction.user.id}, {"$set": {"balance": balance}}
+                )
+            elif(self.dealer_cards[1] == self.player_cards[1]):
+                self.embed.add_field(name="Result", value="Tie", inline=False)
         elif "🇦" in self.player_cards[0] and "🇦" in self.dealer_cards[0]:
-            print("both a")
             if(self.player_cards[1] + 10 > self.dealer_cards[1] + 10 and self.player_cards[1]+10 <= 21 and self.dealer_cards[1] + 10 <=21):
                 self.embed.add_field(name="Result", value="Win", inline=False)
-                balance += amount
+                balance += self.amount
                 collection.update_one(
                     {"_id": interaction.user.id}, {"$set": {"balance": balance}}
                 )
             elif(self.dealer_cards[1] + 10 > self.player_cards[1]+10 and self.dealer_cards[1]+10 <= 21 and self.player_cards[1] + 10 <=21):
                 self.embed.add_field(name="Result", value="Lose", inline=False)
-                balance -= amount
+                balance -= self.amount
                 collection.update_one(
                     {"_id": interaction.user.id}, {"$set": {"balance": balance}}
                 )
@@ -347,53 +384,52 @@ class BlackjackButton(discord.ui.View):
                 self.embed.add_field(name="Result", value="Tie", inline=False)
             elif(self.player_cards[1] + 10 > self.dealer_cards[1] and self.player_cards[1]+10 <= 21 and self.dealer_cards[1] <=21):
                 self.embed.add_field(name="Result", value="Win", inline=False)
-                balance += amount
+                balance += self.amount
                 collection.update_one(
                     {"_id": interaction.user.id}, {"$set": {"balance": balance}}
                 )
             elif(self.player_cards[1] > self.dealer_cards[1] + 10 and self.player_cards[1] <= 21 and self.dealer_cards[1] + 10 <=21):
                 self.embed.add_field(name="Result", value="Win", inline=False)
-                balance += amount
+                balance += self.amount
                 collection.update_one(
                     {"_id": interaction.user.id}, {"$set": {"balance": balance}}
                 )
-            elif(self.player_cards[1] + 10 < self.dealer_cards[1] and self.player.cards[1]+10 <= 21 and self.dealer_cards[1] <=21):
+            elif(self.player_cards[1] + 10 < self.dealer_cards[1] and self.player_cards[1]+10 <= 21 and self.dealer_cards[1] <=21):
                 self.embed.add_field(name="Result", value="Lose", inline=False)
-                balance -= amount
+                balance -= self.amount
                 collection.update_one(
                     {"_id": interaction.user.id}, {"$set": {"balance": balance}}
                 )
-            elif(self.player_cards[1] < self.dealer_cards[1] + 10 and self.player.cards[1] <= 21 and self.dealer_cards[1] + 10 <=21):
+            elif(self.player_cards[1] < self.dealer_cards[1] + 10 and self.player_cards[1] <= 21 and self.dealer_cards[1] + 10 <=21):
                 self.embed.add_field(name="Result", value="Lose", inline=False)
-                balance -= amount
+                balance -= self.amount
                 collection.update_one(
                     {"_id": interaction.user.id}, {"$set": {"balance": balance}}
                 )
-            elif(self.player_cards[1] + 10 == self.dealer_cards[1] and self.player.cards[1]+10 <= 21 and self.dealer_cards[1] <=21):
+            elif(self.player_cards[1] + 10 == self.dealer_cards[1] and self.player_cards[1]+10 <= 21 and self.dealer_cards[1] <=21):
                 self.embed.add_field(name="Result", value="Tie", inline=False)
-            elif(self.player_cards[1] == self.dealer_cards[1] + 10 and self.player.cards[1] <= 21 and self.dealer_cards[1] + 10 <=21):
+            elif(self.player_cards[1] == self.dealer_cards[1] + 10 and self.player_cards[1] <= 21 and self.dealer_cards[1] + 10 <=21):
                 self.embed.add_field(name="Result", value="Tie", inline=False)
         elif self.dealer_cards[1] == self.player_cards[1]:
             self.embed.add_field(name="Result", value="Tie", inline=False)
         elif self.dealer_cards[1] > self.player_cards[1]:
             self.embed.add_field(name="Result", value="Lose", inline=False)
-            balance -= amount
+            balance -= self.amount
             collection.update_one(
                 {"_id": interaction.user.id}, {"$set": {"balance": balance}}
             )
         elif self.dealer_cards[1] < self.player_cards[1]:
             self.embed.add_field(name="Result", value="Win", inline=False)
-            balance += amount
+            balance += self.amount
             collection.update_one(
                 {"_id": interaction.user.id}, {"$set": {"balance": balance}}
-            )   
+            )
         self.embed.add_field(name="Prev Balance", value = f'${prev_balance:,}', inline=True)
         self.embed.add_field(name="New Balance", value = f'${balance:,}', inline=True)
         self.embed.add_field(name="Result", value = f'${balance-prev_balance:,}', inline=True)
         await interaction.followup.edit_message(
                 message_id=interaction.message.id, embed=self.embed, view=self
             )
-
 
 def gamble_helper(interaction: discord.Interaction, amount: Optional[int]):
     prev_balance, balance = balance_of_player(interaction)
