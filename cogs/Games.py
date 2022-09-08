@@ -410,6 +410,19 @@ class BlackjackButton(discord.ui.View):
                 self.embed.add_field(name="Result", value="Tie", inline=False)
             elif(self.player_cards[1] == self.dealer_cards[1] + 10 and self.player_cards[1] <= 21 and self.dealer_cards[1] + 10 <=21):
                 self.embed.add_field(name="Result", value="Tie", inline=False)
+                
+            elif(self.player_cards[1] < self.dealer_cards[1]):
+                self.embed.add_field(name="Result", value="Lose", inline=False)
+                balance -= self.amount
+                collection.update_one(
+                    {"_id": interaction.user.id}, {"$set": {"balance": balance}}
+                )
+            elif(self.player_cards[1] > self.dealer_cards[1] + 10):
+                self.embed.add_field(name="Result", value="Win", inline=False)
+                balance += self.amount
+                collection.update_one(
+                    {"_id": interaction.user.id}, {"$set": {"balance": balance}}
+                )
         elif self.dealer_cards[1] == self.player_cards[1]:
             self.embed.add_field(name="Result", value="Tie", inline=False)
         elif self.dealer_cards[1] > self.player_cards[1]:
