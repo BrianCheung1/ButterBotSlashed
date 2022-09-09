@@ -1,3 +1,6 @@
+from email import message
+import email
+from faulthandler import disable
 from bs4 import BeautifulSoup
 from datetime import datetime
 from discord import app_commands
@@ -111,7 +114,7 @@ class Games(commands.Cog):
         self, interaction: discord.Interaction, amount: Optional[int] = 100
     ):
         await interaction.response.defer()
-        prev_balance, balance = balance_of_player(interaction)
+        prev_balance, balance = balance_of_player(interaction.user)
         if amount > balance:
             embed = discord.Embed(
                 title="Not enough balance", description=f"${amount:,} bet"
@@ -179,7 +182,8 @@ class Games(commands.Cog):
             member = self.bot.user
         view = FightButton(interaction, member)
         content = f'It is {interaction.user.mention} turn'
-        await interaction.response.send_message(embed=fight_helper(interaction, member), view=view)
+        await interaction.response.send_message(embed=fight_helper(interaction, member),content=content, view=view)
+        
         
 class GamesList(discord.ui.View):
     def __init__(self):
@@ -241,7 +245,7 @@ class BlackjackButton(discord.ui.View):
 
     @discord.ui.button(label="Hit", style=discord.ButtonStyle.green)
     async def hit(self, interaction: discord.Interaction, button: discord.ui.Button):
-        prev_balance, balance = balance_of_player(interaction)
+        prev_balance, balance = balance_of_player(interaction.user)
         await interaction.response.defer()
         new_card = random_card()
         self.player_cards[0].append(new_card[1])
@@ -285,7 +289,7 @@ class BlackjackButton(discord.ui.View):
         await self.result(interaction, button)
 
     async def result(self, interaction: discord.Interaction, button: discord.ui.Button):
-        prev_balance, balance = balance_of_player(interaction)
+        prev_balance, balance = balance_of_player(interaction.user)
         prev_balance += self.amount
         balance += self.amount
         collection.update_one(
@@ -459,6 +463,7 @@ class FightButton(discord.ui.View):
         self.member = member
         self.embed = fight_helper(interaction, member)
         self.player = 1
+        self.battle_log = ""
         
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if self.interaction.user.id != interaction.user.id and self.member.id != interaction.user.id:
@@ -477,46 +482,70 @@ class FightButton(discord.ui.View):
                 enemy_health = int(self.embed.fields[1].value) - player_damage
                 self.player = 1
                 if(enemy_health <= 0 and player_health > 0):
-                    content=f'{self.interaction.user.mention} wins'
+                    content=f'{self.interaction.user.mention} wins $100\n'
                     enemy_health = 0
+                    prev_balance, balance = balance_of_player(self.interaction.user)
+                    balance +=100
+                    collection.update_one(
+                    {"_id": self.interaction.user.id}, {"$set": {"balance": balance}}
+                    )
+                    self.attack = False
                 elif(player_health <= 0 and enemy_health > 0):
-                    content=f'{self.member.mention} wins'
+                    content=f'{self.member.mention} wins\n'
                     player_health = 0
+                    self.attack = False
                 elif(player_health <= 0 and enemy_health <= 0):
-                    content=f'it\'s a tie'
+                    content=f'it\'s a tie\n'
                     player_health = 0
                     enemy_damage = 0
+                    self.attack = False
                 else:
-                    content = f'{self.interaction.user.mention} did {player_damage} damage\n{self.member.mention} did {enemy_damage} damage\nIt is now {self.interaction.user.mention}\'s turn'
+                    self.battle_log += f'{self.interaction.user.mention} did {player_damage} damage\n{self.member.mention} did {enemy_damage} damage\n'
+                    content = f'It is now {self.interaction.user.mention}\'s turn\n'
                 
                 self.embed.set_field_at(index=0, name=f'{self.embed.fields[0].name}', value=f'{player_health}')
                 self.embed.set_field_at(index=1, name=f'{self.embed.fields[1].name}', value=f'{enemy_health}')
-
+                content += self.battle_log
                 await interaction.followup.edit_message(message_id=interaction.message.id, content= content, embed=self.embed, view=self)
             else:
                 self.player = 2
-                content = f'It is now {self.member.mention}\'s turn'
+                content = f'It is now {self.member.mention}\'s turn\n'
+                content += self.battle_log
                 await interaction.followup.edit_message(message_id=interaction.message.id, content= content, embed=self.embed, view=self)
         elif(interaction.user.id == self.member.id and self.player == 2):
             player_health = int(self.embed.fields[0].value)- enemy_damage
             enemy_health = int(self.embed.fields[1].value) - player_damage
             self.player = 1
             if(enemy_health <= 0 and player_health > 0):
-                content=f'{self.interaction.user.mention} wins'
+                content=f'{self.interaction.user.mention} wins $100\n'
                 enemy_health = 0
+                prev_balance, balance = balance_of_player(self.interaction.user)
+                balance +=100
+                collection.update_one(
+                {"_id": self.interaction.user.id}, {"$set": {"balance": balance}}
+                )
+                self.attack = False
             elif(player_health <= 0 and enemy_health > 0):
-                content=f'{self.member.mention} wins'
+                content=f'{self.member.mention} wins $100\n'
                 player_health = 0
+                prev_balance, balance = balance_of_player(self.member)
+                balance += 100
+                collection.update_one(
+                {"_id": self.member.id}, {"$set": {"balance": balance}}
+                )
+                self.attack = False
             elif(player_health <= 0 and enemy_health <= 0):
-                content=f'it\'s a tie'
+                content=f'it\'s a tie\n'
                 player_health = 0
-                enemy_damage = 0
+                enemy_health = 0
+                self.attack = False
             else:
-                content = f'{self.interaction.user.mention} did {player_damage} damage\n{self.member.mention} did {enemy_damage} damage\nIt is now {self.interaction.user.mention}\'s turn'
+                self.battle_log += f'{self.interaction.user.mention} did {player_damage} damage\n{self.member.mention} did {enemy_damage} damage\n'
+                content = f'It is now {self.interaction.user.mention}\'s turn\n'
             
             self.embed.set_field_at(index=0, name=f'{self.embed.fields[0].name}', value=f'{player_health}')
             self.embed.set_field_at(index=1, name=f'{self.embed.fields[1].name}', value=f'{enemy_health}')
-
+            content += self.battle_log
             await interaction.followup.edit_message(message_id=interaction.message.id, content= content, embed=self.embed, view=self)
 
     # @discord.ui.button(label="Defend", style=discord.ButtonStyle.red)
@@ -525,6 +554,12 @@ class FightButton(discord.ui.View):
     #     self.embed.set_field_at(index=1, name=f'{self.embed.fields[1].name}', value=f'{int(self.embed.fields[1].value)-5}')
     #     await interaction.followup.edit_message(message_id=interaction.message.id, embed=self.embed, view=self)
     
+    @discord.ui.button(label="Fight Again", style=discord.ButtonStyle.blurple)
+    async def fight_again(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
+        content = f'It is {self.interaction.user.mention} turn'
+        await interaction.followup.edit_message(message_id= interaction.message.id,content=content, embed = fight_helper(interaction, self.member),view = self)
+        
 def gamble_helper(interaction: discord.Interaction, amount: Optional[int]):
     prev_balance, balance = balance_of_player(interaction)
     win = ""
@@ -593,10 +628,10 @@ def random_card():
         random_card_choice = dict_of_cards[random_key]
     return [random_key, random_card_choice]
 
-def balance_of_player(interaction: discord.Interaction):
-    search = {"_id": interaction.user.id}
+def balance_of_player(member: discord.member):
+    search = {"_id": member.id}
     if collection.count_documents(search) == 0:
-        post = {"_id": interaction.user.id, "balance": 1000}
+        post = {"_id": member.id, "balance": 1000}
         collection.insert_one(post)
     user = collection.find(search)
     for result in user:

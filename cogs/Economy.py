@@ -30,27 +30,63 @@ class Economy(commands.Cog):
         member="The member you want to give money to",
         amount="The amount you want to give",
     )
-    @app_commands.checks.has_permissions(moderate_members=True)
     async def give(
         self,
         interaction: discord.Interaction,
-        member: Optional[discord.Member],
-        amount: Optional[int] = 1000,
+        member: discord.Member,
+        amount: int,
     ):
         await interaction.response.defer()
-        if not member:
-            member = interaction.user
-
-        search = {"_id": member.id}
-        if collection.count_documents(search) == 0:
-            await interaction.response.send_message("User does not exist")
-        else:
+        if interaction.user.guild_permissions.administrator:
+            if not member:
+                member = interaction.user
+            search = {"_id": member.id}
+            if collection.count_documents(search) == 0:
+                post = {"_id": member.id, "balance": 1000}
+                collection.insert_one(post)
             user = collection.find(search)
             for result in user:
                 balance = result["balance"]
             balance += amount
             collection.update_one({"_id": member.id}, {"$set": {"balance": balance}})
             await interaction.followup.send(f"{member.mention} now has ${balance:,}")
+        else:
+            if not member:
+                member = interaction.user
+            search = {"_id": member.id}
+            if collection.count_documents(search) == 0:
+                await interaction.response.send_message("User does not exist")
+            else:
+                user = collection.find(search)
+                for result in user:
+                    balance = result["balance"]
+                if amount <= 0:
+                    await interaction.followup.send(
+                        f"{member.mention} cant give away negative money"
+                    )
+                elif amount > balance:
+                    await interaction.followup.send(
+                        f"{member.mention} is too broke to give away money - they only have {balance}"
+                    )
+                else:
+                    balance += amount
+                    collection.update_one(
+                        {"_id": member.id}, {"$set": {"balance": balance}}
+                    )
+
+                    search = {"_id": interaction.user.id}
+                    user = collection.find(search)
+                    for result in user:
+                        user_balance = result["balance"]
+                    user_balance -= amount
+                    collection.update_one(
+                        {"_id": interaction.user.id},
+                        {"$set": {"balance": user_balance}},
+                    )
+
+                    await interaction.followup.send(
+                        f"{member.mention} now has ${balance:,}"
+                    )
 
     @app_commands.command(name="mine", description="Mine ores for money")
     @app_commands.checks.cooldown(1, 60, key=lambda i: (i.guild_id, i.user.id))
@@ -74,19 +110,19 @@ class Economy(commands.Cog):
         choice = random.randint(0, 100)
         mining_result = ""
         if choice < 20:
-            balance += random.randint(1, 20)
+            balance += random.randint(50, 100)
             mining_result = random.choice(common_blocks)
         if choice >= 20 and choice < 60:
-            balance += random.randint(20, 40)
+            balance += random.randint(100, 150)
             mining_result = random.choice(common_ores)
         if choice >= 60 and choice < 80:
-            balance += random.randint(40, 60)
+            balance += random.randint(150, 250)
             mining_result = random.choice(uncommon_ores)
         if choice >= 80 and choice < 95:
-            balance += random.randint(60, 80)
+            balance += random.randint(250, 500)
             mining_result = random.choice(rare_ores)
         if choice > 95:
-            balance += random.randint(100, 150)
+            balance += random.randint(500, 750)
             mining_result = random.choice(epic_ores)
 
         collection.update_one(
