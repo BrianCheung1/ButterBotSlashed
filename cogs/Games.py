@@ -173,6 +173,14 @@ class Games(commands.Cog):
                 view = BlackjackButton(dealer_cards, player_cards, embed, interaction, amount)
                 await interaction.followup.send(embed=embed, view=view)
 
+    @app_commands.command(name="fight")
+    async def fight(self, interaction: discord.Interaction, member: Optional[discord.Member] = None):
+        if not member:
+            member = self.bot.user
+        view = FightButton(interaction, member)
+        content = f'It is {interaction.user.mention} turn'
+        await interaction.response.send_message(embed=fight_helper(interaction, member), view=view)
+        
 class GamesList(discord.ui.View):
     def __init__(self):
         super().__init__()
@@ -444,6 +452,79 @@ class BlackjackButton(discord.ui.View):
                 message_id=interaction.message.id, embed=self.embed, view=self
             )
 
+class FightButton(discord.ui.View):
+    def __init__(self,interaction:discord.Interaction, member: discord.Member):
+        super().__init__()
+        self.interaction = interaction
+        self.member = member
+        self.embed = fight_helper(interaction, member)
+        self.player = 1
+        
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if self.interaction.user.id != interaction.user.id and self.member.id != interaction.user.id:
+            return False
+        return True
+    
+    @discord.ui.button(label="Attack", style=discord.ButtonStyle.red)
+    async def attack(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
+        player_damage = random.randint(10,20)
+        enemy_damage = random.randint(10,20)
+        if(interaction.user.id == self.interaction.user.id and self.player == 1):
+            #self.embed.set_field_at(index=1, name=f'{self.embed.fields[1].name}', value=f'{int(self.embed.fields[1].value)-damage}')
+            if(self.member.bot):
+                player_health = int(self.embed.fields[0].value)- enemy_damage
+                enemy_health = int(self.embed.fields[1].value) - player_damage
+                self.player = 1
+                if(enemy_health <= 0 and player_health > 0):
+                    content=f'{self.interaction.user.mention} wins'
+                    enemy_health = 0
+                elif(player_health <= 0 and enemy_health > 0):
+                    content=f'{self.member.mention} wins'
+                    player_health = 0
+                elif(player_health <= 0 and enemy_health <= 0):
+                    content=f'it\'s a tie'
+                    player_health = 0
+                    enemy_damage = 0
+                else:
+                    content = f'{self.interaction.user.mention} did {player_damage} damage\n{self.member.mention} did {enemy_damage} damage\nIt is now {self.interaction.user.mention}\'s turn'
+                
+                self.embed.set_field_at(index=0, name=f'{self.embed.fields[0].name}', value=f'{player_health}')
+                self.embed.set_field_at(index=1, name=f'{self.embed.fields[1].name}', value=f'{enemy_health}')
+
+                await interaction.followup.edit_message(message_id=interaction.message.id, content= content, embed=self.embed, view=self)
+            else:
+                self.player = 2
+                content = f'It is now {self.member.mention}\'s turn'
+                await interaction.followup.edit_message(message_id=interaction.message.id, content= content, embed=self.embed, view=self)
+        elif(interaction.user.id == self.member.id and self.player == 2):
+            player_health = int(self.embed.fields[0].value)- enemy_damage
+            enemy_health = int(self.embed.fields[1].value) - player_damage
+            self.player = 1
+            if(enemy_health <= 0 and player_health > 0):
+                content=f'{self.interaction.user.mention} wins'
+                enemy_health = 0
+            elif(player_health <= 0 and enemy_health > 0):
+                content=f'{self.member.mention} wins'
+                player_health = 0
+            elif(player_health <= 0 and enemy_health <= 0):
+                content=f'it\'s a tie'
+                player_health = 0
+                enemy_damage = 0
+            else:
+                content = f'{self.interaction.user.mention} did {player_damage} damage\n{self.member.mention} did {enemy_damage} damage\nIt is now {self.interaction.user.mention}\'s turn'
+            
+            self.embed.set_field_at(index=0, name=f'{self.embed.fields[0].name}', value=f'{player_health}')
+            self.embed.set_field_at(index=1, name=f'{self.embed.fields[1].name}', value=f'{enemy_health}')
+
+            await interaction.followup.edit_message(message_id=interaction.message.id, content= content, embed=self.embed, view=self)
+
+    # @discord.ui.button(label="Defend", style=discord.ButtonStyle.red)
+    # async def defend(self, interaction: discord.Interaction, button: discord.ui.Button):
+    #     await interaction.response.defer()
+    #     self.embed.set_field_at(index=1, name=f'{self.embed.fields[1].name}', value=f'{int(self.embed.fields[1].value)-5}')
+    #     await interaction.followup.edit_message(message_id=interaction.message.id, embed=self.embed, view=self)
+    
 def gamble_helper(interaction: discord.Interaction, amount: Optional[int]):
     prev_balance, balance = balance_of_player(interaction)
     win = ""
@@ -522,7 +603,15 @@ def balance_of_player(interaction: discord.Interaction):
         balance = result["balance"]
         prev_balance = balance
     return prev_balance, balance
-
+    
+def fight_helper(interaction: discord.interactions, member: discord.Member):
+    embed = discord.Embed(title=f"Battle Time")
+    enemy_health = 100
+    player_health = 100
+    embed.add_field(name=f'{interaction.user.display_name} Health Bar', value=f'{player_health}', inline=True)
+    embed.add_field(name=f'{member.display_name} Health Bar', value=f'{enemy_health}', inline=True)
+    return embed
+    
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(Games(bot), guilds=MY_GUILDS)
     print("Games is Loaded")
