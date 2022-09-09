@@ -74,7 +74,6 @@ class Games(commands.Cog):
         price = soup.find("meta", itemprop="price")["content"]
         reviews = soup.find("meta", itemprop="reviewCount")["content"]
         app_id = steam_link.split("/")[4]
-
         embed = discord.Embed(title=f"{add} - {title}", color=0x336EFF, url=steam_link)
         embed.add_field(
             name="Direct Download Link",
@@ -472,6 +471,7 @@ class FightButton(discord.ui.View):
     
     @discord.ui.button(label="Attack", style=discord.ButtonStyle.red)
     async def attack(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.fight_again.disabled = True
         await interaction.response.defer()
         player_damage = random.randint(10,20)
         enemy_damage = random.randint(10,20)
@@ -489,16 +489,19 @@ class FightButton(discord.ui.View):
                     collection.update_one(
                     {"_id": self.interaction.user.id}, {"$set": {"balance": balance}}
                     )
-                    self.attack = False
+                    self.attack.disabled = True
+                    self.fight_again.disabled = False
                 elif(player_health <= 0 and enemy_health > 0):
                     content=f'{self.member.mention} wins\n'
                     player_health = 0
-                    self.attack = False
+                    self.attack.disabled = True
+                    self.fight_again.disabled = False
                 elif(player_health <= 0 and enemy_health <= 0):
                     content=f'it\'s a tie\n'
                     player_health = 0
                     enemy_damage = 0
-                    self.attack = False
+                    self.attack.disabled = True
+                    self.fight_again.disabled = False
                 else:
                     self.battle_log += f'{self.interaction.user.mention} did {player_damage} damage\n{self.member.mention} did {enemy_damage} damage\n'
                     content = f'It is now {self.interaction.user.mention}\'s turn\n'
@@ -524,7 +527,8 @@ class FightButton(discord.ui.View):
                 collection.update_one(
                 {"_id": self.interaction.user.id}, {"$set": {"balance": balance}}
                 )
-                self.attack = False
+                self.attack.disabled = True
+                self.fight_again.disabled = False
             elif(player_health <= 0 and enemy_health > 0):
                 content=f'{self.member.mention} wins $100\n'
                 player_health = 0
@@ -533,12 +537,14 @@ class FightButton(discord.ui.View):
                 collection.update_one(
                 {"_id": self.member.id}, {"$set": {"balance": balance}}
                 )
-                self.attack = False
+                self.attack.disabled = True
+                self.fight_again.disabled = False
             elif(player_health <= 0 and enemy_health <= 0):
                 content=f'it\'s a tie\n'
                 player_health = 0
                 enemy_health = 0
-                self.attack = False
+                self.attack.disabled = True
+                self.fight_again.disabled = False
             else:
                 self.battle_log += f'{self.interaction.user.mention} did {player_damage} damage\n{self.member.mention} did {enemy_damage} damage\n'
                 content = f'It is now {self.interaction.user.mention}\'s turn\n'

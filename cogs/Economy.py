@@ -91,11 +91,11 @@ class Economy(commands.Cog):
     @app_commands.command(name="mine", description="Mine ores for money")
     @app_commands.checks.cooldown(1, 60, key=lambda i: (i.guild_id, i.user.id))
     async def mine(self, interaction: discord.Interaction):
-        common_blocks = ["dirt", "sand", "cobble"]
-        common_ores = ["coal", "redstone", "lapis lazuli", "copper"]
-        uncommon_ores = ["iron", "gold", "nether quartz"]
-        rare_ores = ["diamond", "emerald"]
-        epic_ores = ["ancient debris"]
+        common_blocks = ["dirt", "sand", "cobblestone", "wood"]
+        common_ores = ["coal", "redstone", "lapis lazuli", "copper", "tin"]
+        uncommon_ores = ["iron", "gold", "nether quartz", "platinum", "golden apple"]
+        rare_ores = ["diamond", "emerald", "mythril", "sponge"]
+        epic_ores = ["ancient debris", "dragon egg", "nether star"]
 
         search = {"_id": interaction.user.id}
         if collection.count_documents(search) == 0:
@@ -107,7 +107,7 @@ class Economy(commands.Cog):
             prev_balance = balance
 
         await interaction.response.defer()
-        choice = random.randint(0, 100)
+        choice = random.randint(0, 101)
         mining_result = ""
         if choice < 20:
             balance += random.randint(50, 100)
@@ -121,9 +121,12 @@ class Economy(commands.Cog):
         if choice >= 80 and choice < 95:
             balance += random.randint(250, 500)
             mining_result = random.choice(rare_ores)
-        if choice > 95:
+        if choice >= 95 and choice < 100:
             balance += random.randint(500, 750)
             mining_result = random.choice(epic_ores)
+        if choice == 95 and choice == 100:
+            balance += random.randint(1500, 2000)
+            mining_result = f"{random.choice(epic_ores)}, {random.choice(rare_ores)}, and {random.choice(uncommon_ores)}"
 
         collection.update_one(
             {"_id": interaction.user.id}, {"$set": {"balance": balance}}
