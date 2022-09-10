@@ -8,6 +8,7 @@ import discord
 import json
 import os
 import requests
+import random
 
 
 load_dotenv()
@@ -27,15 +28,12 @@ class Gifs(commands.Cog):
     async def gif(self, interaction: discord.Interaction, query: str):
         """Sends a gif of your query"""
         r = requests.get(
-            "https://tenor.googleapis.com/v2/search?q=%s&key=%s&client_key=butter&limit=50"
-            % (query, KEY)
+            f"https://tenor.googleapis.com/v2/search?q={query}&key={KEY}&client_key=butter&limit=50", timeout=100
         )
-
-        gif_list = []
-
         if r.status_code == 200:
             # load the GIFs using the urls for the smaller GIF sizes
             found_gifs = json.loads(r.content)
+            gif_list = []
             gif_list.extend(
                 media["media_formats"]["gif"]["url"] for media in found_gifs["results"]
             )
@@ -53,15 +51,14 @@ class Gifs(commands.Cog):
     @app_commands.describe(emoji="type in the emoji you want enlarged")
     async def enlarge(self, interaction: discord.Interaction, emoji: str):
         """Enlarges an emoji"""
-        print(emoji2)
         emoji_id = emoji.rsplit(":", 1)[-1].replace(">", "")
         fixed_emoji = self.bot.get_emoji(int(emoji_id))
-        guild_emojis = [emoji for emoji in interaction.guild.emojis]
+        guild_emojis = list(interaction.guild.emojis)
 
-        # if (fixed_emoji in guild_emojis):
-        await interaction.response.send_message(fixed_emoji.url)
-        # else:
-        #     await interaction.response.send_message("Emoji not in server")
+        if fixed_emoji in guild_emojis:
+            await interaction.response.send_message(fixed_emoji.url)
+        else:
+            await interaction.response.send_message("Emoji not in server")
 
     @app_commands.command(
         name="random-emoji", description="Button to show random emojis in the server"

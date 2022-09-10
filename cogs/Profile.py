@@ -97,38 +97,28 @@ class Profile(commands.Cog):
 
         await interaction.response.send_message(embed=embed, view=view)
 
-    @app_commands.command(
-        name="server-info", description="Shows information about the server"
-    )
+    @app_commands.command(name="server-info", description="Shows information about the server")
     async def server_info(self, interaction: discord.Interaction):
-        """test"""
+        """Shows information about the server """
         server = interaction.user.guild
         embed = discord.Embed(title=f"Information about {server.name}")
         embed.add_field(name="Owner 👑", value=server.owner, inline=True)
         embed.add_field(name="Server ID", value=server.id, inline=True)
-        embed.add_field(
-            name="Server Creation Date",
-            value=f"{discord.utils.format_dt(server.created_at)}",
-            inline=False,
-        )
-        embed.add_field(
-            name="Voice Channels", value=f"{len(server.voice_channels)}", inline=True
-        )
-        embed.add_field(
-            name="Text Channels", value=f"{len(server.text_channels)}", inline=True
-        )
-        embed.add_field(name="Members", value=server.member_count, inline=True)
+        embed.add_field(name="Server Creation Date", value=f"{discord.utils.format_dt(server.created_at)}", inline=False)
 
+        embed.add_field(name="Voice Channels", value=f"{len(server.voice_channels)}", inline=True)
+
+        embed.add_field(name="Text Channels", value=f"{len(server.text_channels)}", inline=True)
+
+        embed.add_field(name="Members", value=server.member_count, inline=True)
         role_names = [role.mention for role in server.roles[1:]]
         count = len(role_names)
         all_roles = " ".join(role_names)
         if len(all_roles) >= 1000:
             all_roles = all_roles[:1000].rsplit("<@&", 1)[0] + "..."
-        elif (len(all_roles)) == 0:
+        elif not all_roles:
             all_roles = "`None ` "
-
         embed.add_field(name=f"Roles - {count}", value=f"{all_roles}", inline=False)
-
         embed.set_thumbnail(url=server.icon)
         await interaction.response.send_message(embed=embed)
 

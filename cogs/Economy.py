@@ -34,70 +34,48 @@ class Economy(commands.Cog):
         self,
         interaction: discord.Interaction,
         member: discord.Member,
-        amount: int,
+        amount: Optional[app_commands.Range[int, 1, None]] = 1000,
     ):
         await interaction.response.defer()
+        if not member:
+            member = interaction.user
+        search = {"_id": member.id}
+        user = collection.find(search)
+        if collection.count_documents(search) == 0:
+            post = {"_id": member.id, "balance": 1000}
+            collection.insert_one(post)
         if interaction.user.guild_permissions.administrator:
-            if not member:
-                member = interaction.user
-            search = {"_id": member.id}
-            if collection.count_documents(search) == 0:
-                post = {"_id": member.id, "balance": 1000}
-
-                collection.insert_one(post)
-            user = collection.find(search)
             for result in user:
                 balance = float(result["balance"])
             balance += amount
             collection.update_one({"_id": member.id}, {"$set": {"balance": balance}})
             await interaction.followup.send(f"{member.mention} now has ${balance:,.2f}")
         else:
-            if not member:
-                member = interaction.user
-            search = {"_id": member.id}
-            if collection.count_documents(search) == 0:
-                await interaction.response.send_message("User does not exist")
+            for result in user:
+                balance = result["balance"]
+            search = {"_id": interaction.user.id}
+            user = collection.find(search)
+            for result in user:
+                user_balance = result["balance"]
+            if amount > user_balance:
+                await interaction.followup.send(
+                    f"{member.mention} is too broke to give away money - they only have {user_balance:,.2f}"
+                )
             else:
-                user = collection.find(search)
-                for result in user:
-                    balance = result["balance"]
-                search = {"_id": interaction.user.id}
-                user = collection.find(search)
-                for result in user:
-                    user_balance = result["balance"]
+                balance += amount
+                collection.update_one(
+                    {"_id": member.id},
+                    {"$set": {"balance": balance}},
+                )
+                user_balance -= amount
+                collection.update_one(
+                    {"_id": interaction.user.id},
+                    {"$set": {"balance": user_balance}},
+                )
 
-                if amount < 0:
-                    await interaction.followup.send(
-                        f"{member.mention} cant give away negative money"
-                    )
-                elif amount == 0:
-                    await interaction.followup.send(
-                        f"{member.mention} cant give away $0"
-                    )
-                elif amount > user_balance:
-                    await interaction.followup.send(
-                        f"{member.mention} is too broke to give away money - they only have {user_balance:,.2f}"
-                    )
-                else:
-                    balance += amount
-                    collection.update_one(
-                        {"_id": member.id},
-                        {"$set": {"balance": balance}},
-                    )
-
-                    search = {"_id": interaction.user.id}
-                    user = collection.find(search)
-                    for result in user:
-                        user_balance = result["balance"]
-                    user_balance -= amount
-                    collection.update_one(
-                        {"_id": interaction.user.id},
-                        {"$set": {"balance": user_balance}},
-                    )
-
-                    await interaction.followup.send(
-                        f"{member.mention} now has ${balance:,}"
-                    )
+                await interaction.followup.send(
+                    f"{member.mention} now has ${balance:,}"
+                )
 
     @app_commands.command(name="mine", description="Mine ores for money")
     @app_commands.checks.cooldown(1, 60, key=lambda i: (i.guild_id, i.user.id))
@@ -142,7 +120,7 @@ class Economy(commands.Cog):
             {"_id": interaction.user.id}, {"$set": {"balance": balance}}
         )
         await interaction.followup.send(
-            f"{interaction.user.mention} found {mining_result}, it's worth ${balance-prev_balance:,.2f}, {interaction.user.mention} has ${balance-prev_balance:,.2f}"
+            f"{interaction.user.mention} found {mining_result}, it's worth ${balance-prev_balance:,.2f}, {interaction.user.mention} has ${balance:,.2f}"
         )
 
     @app_commands.command(
