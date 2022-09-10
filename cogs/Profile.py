@@ -81,7 +81,7 @@ class Profile(commands.Cog):
         for result in user:
             balance = result["balance"]
 
-        embed.add_field(name="Balance", value=f"${balance:,}", inline=True)
+        embed.add_field(name="Balance", value=f"${float(balance):,.2f}", inline=True)
         embed.add_field(name=f"Roles - {count}", value=f"{all_roles}", inline=False)
         embed.set_image(url=member.display_avatar)
         embed.timestamp = datetime.now()

@@ -43,13 +43,14 @@ class Economy(commands.Cog):
             search = {"_id": member.id}
             if collection.count_documents(search) == 0:
                 post = {"_id": member.id, "balance": 1000}
+
                 collection.insert_one(post)
             user = collection.find(search)
             for result in user:
-                balance = result["balance"]
+                balance = float(result["balance"])
             balance += amount
             collection.update_one({"_id": member.id}, {"$set": {"balance": balance}})
-            await interaction.followup.send(f"{member.mention} now has ${balance:,}")
+            await interaction.followup.send(f"{member.mention} now has ${balance:,.2f}")
         else:
             if not member:
                 member = interaction.user
@@ -60,18 +61,28 @@ class Economy(commands.Cog):
                 user = collection.find(search)
                 for result in user:
                     balance = result["balance"]
-                if amount <= 0:
+                search = {"_id": interaction.user.id}
+                user = collection.find(search)
+                for result in user:
+                    user_balance = result["balance"]
+
+                if amount < 0:
                     await interaction.followup.send(
                         f"{member.mention} cant give away negative money"
                     )
-                elif amount > balance:
+                elif amount == 0:
                     await interaction.followup.send(
-                        f"{member.mention} is too broke to give away money - they only have {balance}"
+                        f"{member.mention} cant give away $0"
+                    )
+                elif amount > user_balance:
+                    await interaction.followup.send(
+                        f"{member.mention} is too broke to give away money - they only have {user_balance:,.2f}"
                     )
                 else:
                     balance += amount
                     collection.update_one(
-                        {"_id": member.id}, {"$set": {"balance": balance}}
+                        {"_id": member.id},
+                        {"$set": {"balance": balance}},
                     )
 
                     search = {"_id": interaction.user.id}
@@ -103,7 +114,7 @@ class Economy(commands.Cog):
             collection.insert_one(post)
         user = collection.find(search)
         for result in user:
-            balance = result["balance"]
+            balance = float(result["balance"])
             prev_balance = balance
 
         await interaction.response.defer()
@@ -124,16 +135,15 @@ class Economy(commands.Cog):
         if choice >= 95 and choice < 100:
             balance += random.randint(500, 750)
             mining_result = random.choice(epic_ores)
-        if choice == 95 and choice == 100:
+        if choice == 101:
             balance += random.randint(1500, 2000)
-            mining_result = f"{random.choice(epic_ores)}, {random.choice(rare_ores)}, and {random.choice(uncommon_ores)}"
-
+            mining_result = f"epic loot {random.choice(epic_ores)}, {random.choice(rare_ores)}, {random.choice(uncommon_ores)}, {random.choice(common_ores)}, and {random.choice(common_blocks)}"
         collection.update_one(
             {"_id": interaction.user.id}, {"$set": {"balance": balance}}
         )
 
         await interaction.followup.send(
-            f"{interaction.user.mention} found {mining_result}, it's worth ${balance-prev_balance}"
+            f"{interaction.user.mention} found {mining_result}, it's worth ${balance-prev_balance:,.2f}"
         )
 
     @app_commands.command(
@@ -159,7 +169,7 @@ class Economy(commands.Cog):
         embed = discord.Embed(title=f"{interaction.guild.name} Leaderboard")
         for member, balance in sorted_top_members.items():
             embed.add_field(
-                name=f"{count}. {member}", value=f"${balance}", inline=False
+                name=f"{count}. {member}", value=f"${float(balance):,.2f}", inline=False
             )
             count += 1
             if count > 10:

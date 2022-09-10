@@ -53,6 +53,7 @@ class Gifs(commands.Cog):
     @app_commands.describe(emoji="type in the emoji you want enlarged")
     async def enlarge(self, interaction: discord.Interaction, emoji: str):
         """Enlarges an emoji"""
+        print(emoji2)
         emoji_id = emoji.rsplit(":", 1)[-1].replace(">", "")
         fixed_emoji = self.bot.get_emoji(int(emoji_id))
         guild_emojis = [emoji for emoji in interaction.guild.emojis]
