@@ -132,6 +132,23 @@ class Profile(commands.Cog):
         embed.set_thumbnail(url=server.icon)
         await interaction.response.send_message(embed=embed)
 
+    @app_commands.command(name="balance", description="Shows balance of user")
+    async def balance(
+        self, interaction: discord.Interaction, member: Optional[discord.Member]
+    ):
+        if not member:
+            member = interaction.user
+
+        search = {"_id": member.id}
+        if collection.count_documents(search) == 0:
+            post = {"_id": member.id, "balance": 1000}
+            collection.insert_one(post)
+        user = collection.find(search)
+        for result in user:
+            balance = result["balance"]
+        await interaction.response.defer()
+        await interaction.followup.send(f"💳{member.mention} has ${balance:,.2f}")
+
 
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(Profile(bot), guilds=MY_GUILDS)

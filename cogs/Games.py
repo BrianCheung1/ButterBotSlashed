@@ -1,6 +1,4 @@
-from email import message
-import email
-from faulthandler import disable
+
 from bs4 import BeautifulSoup
 from datetime import datetime
 from discord import app_commands
@@ -177,9 +175,9 @@ class Games(commands.Cog):
                     {"_id": interaction.user.id}, {"$set": {"balance": balance}}
                 )
                 embed.add_field(name="Result", value="Win", inline=False)
-                embed.add_field(name="Prev Balance", value = f'${prev_balance:,}', inline=True)
-                embed.add_field(name="New Balance", value = f'${balance:,}', inline=True)
-                embed.add_field(name="Result", value = f'${balance-prev_balance:,}', inline=True)
+                embed.add_field(name="Prev Balance", value = f'${prev_balance:,.2f}', inline=True)
+                embed.add_field(name="New Balance", value = f'${balance:,.2f}', inline=True)
+                embed.add_field(name="Result", value = f'${balance-prev_balance:,.2f}', inline=True)
                 await interaction.followup.send(embed=embed)
             else:
                 view = BlackjackButton(dealer_cards, player_cards, embed, interaction, amount)
@@ -286,13 +284,13 @@ class BlackjackButton(discord.ui.View):
                 {"_id": interaction.user.id}, {"$set": {"balance": balance}}
             )
             self.embed.add_field(name="Result", value="Lose", inline=False)
-            self.embed.add_field(name="Prev Balance", value = f'${prev_balance:,}', inline=True)
-            self.embed.add_field(name="New Balance", value = f'${balance:,}', inline=True)
+            self.embed.add_field(name="Prev Balance", value = f'${prev_balance:,.2f}', inline=True)
+            self.embed.add_field(name="New Balance", value = f'${balance:,.2f}', inline=True)
             new_balance = balance-prev_balance;
             if(new_balance >= 0):
-                self.embed.add_field(name="Result", value = f'+${abs(new_balance):,}', inline=True)
+                self.embed.add_field(name="Result", value = f'+${abs(new_balance):,.2f}', inline=True)
             else:
-                self.embed.add_field(name="Result", value = f'-${abs(new_balance):,}', inline=True)
+                self.embed.add_field(name="Result", value = f'-${abs(new_balance):,.2f}', inline=True)
             await interaction.followup.edit_message(
                 message_id=interaction.message.id, embed=self.embed, view=self
             )
@@ -518,13 +516,13 @@ class BlackjackButton(discord.ui.View):
             collection.update_one(
                 {"_id": interaction.user.id}, {"$set": {"balance": balance}}
             )
-        self.embed.add_field(name="Prev Balance", value = f'${prev_balance:,}', inline=True)
-        self.embed.add_field(name="New Balance", value = f'${balance:,}', inline=True)
+        self.embed.add_field(name="Prev Balance", value = f'${prev_balance:,.2f}', inline=True)
+        self.embed.add_field(name="New Balance", value = f'${balance:,.2f}', inline=True)
         new_balance = balance-prev_balance;
         if(new_balance >= 0):
-            self.embed.add_field(name="Result", value = f'+${abs(new_balance):,}', inline=True)
+            self.embed.add_field(name="Result", value = f'+${abs(new_balance):,.2f}', inline=True)
         else:
-            self.embed.add_field(name="Result", value = f'-${abs(new_balance):,}', inline=True)
+            self.embed.add_field(name="Result", value = f'-${abs(new_balance):,.2f}', inline=True)
         await interaction.followup.edit_message(
                 message_id=interaction.message.id, embed=self.embed, view=self
             )
@@ -645,19 +643,19 @@ def gamble_helper(interaction: discord.Interaction, amount: Optional[int]):
     win = ""
     if amount > balance:
         embed = discord.Embed(
-            title="Not enough balance", description=f"${amount:,} bet"
+            title="Not enough balance", description=f"${amount:,.2f} bet"
         )
-        embed.add_field(name="Needed Balance", value=f"${amount:,}", inline=True)
-        embed.add_field(name="Balance", value=f"${balance:,}", inline=True)
+        embed.add_field(name="Needed Balance", value=f"${amount:,.2f}", inline=True)
+        embed.add_field(name="Balance", value=f"${balance:,.2f}", inline=True)
         return embed
     if amount < 0:
         embed = discord.Embed(
-            title="Cant give away negative money", description=f"${amount:,} bet"
+            title="Cant give away negative money", description=f"${amount:,.2f} bet"
         )
         return embed
     if amount == 0:
         embed = discord.Embed(
-            title="Cant give away $0", description=f"${amount:,} bet"
+            title="Cant give away $0", description=f"${amount:,.2f} bet"
         )
         return embed
     else:
@@ -677,24 +675,24 @@ def gamble_helper(interaction: discord.Interaction, amount: Optional[int]):
             win = f'Dealer rolled a higher number'
         elif bot_number == member_number:
             win = "No Winners"
-        embed = discord.Embed(title="Gambling Details", description=f"${amount:,} bet")
+        embed = discord.Embed(title="Gambling Details", description=f"${amount:,.2f} bet")
         embed.add_field(name="Dealer rolled a ", value=bot_number, inline=False)
         embed.add_field(
             name=f"{interaction.user} rolled a", value=member_number, inline=False
         )
         embed.add_field(name="Result", value=f"{win}", inline=False)
         embed.add_field(
-            name="Previous Balance", value=f"${prev_balance:,}", inline=True
+            name="Previous Balance", value=f"${prev_balance:,.2f}", inline=True
         )
-        embed.add_field(name="New Balance", value=f"${balance:,}", inline=True)
+        embed.add_field(name="New Balance", value=f"${balance:,.2f}", inline=True)
         new_balance = balance - prev_balance
         if new_balance >= 0:
             embed.add_field(
-                name="Result", value=f"+${abs(balance-prev_balance):,}", inline=True
+                name="Result", value=f"+${abs(balance-prev_balance):,.2f}", inline=True
             )
         else:
             embed.add_field(
-                name="Result", value=f"-${abs(balance-prev_balance):,}", inline=True
+                name="Result", value=f"-${abs(balance-prev_balance):,.2f}", inline=True
             )
         return embed
 

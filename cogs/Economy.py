@@ -141,9 +141,8 @@ class Economy(commands.Cog):
         collection.update_one(
             {"_id": interaction.user.id}, {"$set": {"balance": balance}}
         )
-
         await interaction.followup.send(
-            f"{interaction.user.mention} found {mining_result}, it's worth ${balance-prev_balance:,.2f}"
+            f"{interaction.user.mention} found {mining_result}, it's worth ${balance-prev_balance:,.2f}, {interaction.user.mention} has ${balance-prev_balance:,.2f}"
         )
 
     @app_commands.command(

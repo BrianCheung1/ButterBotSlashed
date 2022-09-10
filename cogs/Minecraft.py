@@ -26,7 +26,9 @@ class Minecraft(commands.Cog):
     @app_commands.command(name="mc", description="Show status of minecraft server")
     async def minecraft(self, interaction: discord.Interaction):
         """Show status of minecraft server"""
-        url = requests.get(f"https://minecraft-api.com/api/ping/{IP}/25565/json")
+        url = requests.get(
+            f"https://minecraft-api.com/api/ping/{IP}/25565/json", timeout=100
+        )
         if not url.text.__contains__("players"):
             await interaction.response.send_message("Server is offline")
         text = json.loads(url.text)
