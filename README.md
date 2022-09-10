@@ -6,9 +6,17 @@ ButterBotSlashed is an open-source discord bot
 
   -  Profile
   -  Minecraft server status
-  -  Games information
+  -  Games
+    -  Blackjack
+    -  Rolling higher or lower
+    -  Mining blocks/ores
+  -  Economy
+    -  Giving money to one another
+    -  Leaderboard for richest members
   -  Simple math commands
-  -  Logging of messages
+  -  Logging messages to console
+  -  Googling
+  -  Gifs
 
 
 ## Installation
