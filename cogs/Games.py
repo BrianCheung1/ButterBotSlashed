@@ -251,6 +251,10 @@ class BlackjackButton(discord.ui.View):
         self.embed = embed
         self.interaction = interaction
         self.amount = amount
+        prev_balance, balance = balance_of_player(interaction.user)
+        balance += self.amount
+        if self.amount * 2 > balance:
+            self.double_down.disabled = True
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if self.interaction.user.id != interaction.user.id:
@@ -272,11 +276,7 @@ class BlackjackButton(discord.ui.View):
         new_card = random_card()
         self.player_cards[0].append(new_card[1])
         self.player_cards[1] += new_card[0]
-        if (
-            "🇦" in self.player_cards[0]
-            and self.player_cards[1] <= 10
-            and self.player_cards[1] <= 11
-        ):
+        if "🇦" in self.player_cards[0] and self.player_cards[1] <= 11:
             self.embed.set_field_at(
                 index=1,
                 name=f"Player's Hand - {self.player_cards[1]}/{self.player_cards[1] + 10}",
@@ -293,8 +293,9 @@ class BlackjackButton(discord.ui.View):
             )
 
         if self.player_cards[1] > 21:
-            button.disabled = True
+            self.hit.disabled = True
             self.stay.disabled = True
+            self.double_down.disabled = True
             balance -= self.amount
             collection.update_one(
                 {"_id": interaction.user.id}, {"$set": {"balance": balance}}
@@ -333,50 +334,78 @@ class BlackjackButton(discord.ui.View):
         await interaction.response.defer()
         await self.result(interaction, button)
 
-    # @discord.ui.button(label="Double Down", style=discord.ButtonStyle.blurple)
-    # async def double_down(self, interaction: discord.Interaction, button: discord.ui.Button):
-    #     prev_balance, balance = balance_of_player(interaction.user)
-    #     await interaction.response.defer()
-    #     new_card = random_card()
-    #     self.player_cards[0].append(new_card[1])
-    #     self.player_cards[1] += new_card[0]
-    #     if("🇦" in self.player_cards[0] and self.player_cards[1] <=10 and self.player_cards[1] +10 <=21):
-    #         self.embed.set_field_at(
-    #         index=1,
-    #         name=f"Player's Hand - {self.player_cards[1]}/{self.player_cards[1]+10}",
-    #         value=f"{self.embed.fields[1].value} {self.player_cards[0][-1]}",
-    #         inline=False,
-    #     )
-    #     else:
-    #         self.embed.set_field_at(
-    #             index=1,
-    #             name=f"Player's Hand - {self.player_cards[1]}",
-    #             value=f"{self.embed.fields[1].value} {self.player_cards[0][-1]}",
-    #             inline=False,
-    #         )
-    #     if self.player_cards[1] > 21:
-    #         button.disabled = True
-    #         self.stay.disabled = True
-    #         prev_balance += self.amount
-    #         collection.update_one(
-    #             {"_id": interaction.user.id}, {"$set": {"balance": balance}}
-    #         )
-    #         self.embed.add_field(name="Result", value="Lose", inline=False)
-    #         self.embed.add_field(name="Prev Balance", value = f'${prev_balance:,}', inline=True)
-    #         self.embed.add_field(name="New Balance", value = f'${balance:,}', inline=True)
-    #         new_balance = balance-prev_balance;
-    #         if(new_balance >= 0):
-    #             self.embed.add_field(name="Result", value = f'+${abs(new_balance):,}', inline=True)
-    #         else:
-    #             self.embed.add_field(name="Result", value = f'-${abs(new_balance):,}', inline=True)
-    #         await interaction.followup.edit_message(
-    #             message_id=interaction.message.id, embed=self.embed, view=self
-    #         )
-    #     else:
-    #         await interaction.followup.edit_message(
-    #             message_id=interaction.message.id, embed=self.embed, view=self
-    #         )
-    #     await self.result(interaction, button)
+    @discord.ui.button(label="Double Down", style=discord.ButtonStyle.blurple)
+    async def double_down(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        prev_balance, balance = balance_of_player(interaction.user)
+        print(prev_balance, balance)
+        prev_balance += self.amount
+        balance += self.amount
+        collection.update_one(
+            {"_id": interaction.user.id}, {"$set": {"balance": balance}}
+        )
+        await interaction.response.defer()
+        new_card = random_card()
+        self.player_cards[0].append(new_card[1])
+        self.player_cards[1] += new_card[0]
+        if (
+            "🇦" in self.player_cards[0]
+            and self.player_cards[1] <= 10
+            and self.player_cards[1] <= 11
+        ):
+            self.embed.set_field_at(
+                index=1,
+                name=f"Player's Hand - {self.player_cards[1]}/{self.player_cards[1] + 10}",
+                value=f"{self.embed.fields[1].value} {self.player_cards[0][-1]}",
+                inline=False,
+            )
+
+        else:
+            self.embed.set_field_at(
+                index=1,
+                name=f"Player's Hand - {self.player_cards[1]}",
+                value=f"{self.embed.fields[1].value} {self.player_cards[0][-1]}",
+                inline=False,
+            )
+
+        if self.player_cards[1] > 21:
+            self.hit.disabled = True
+            self.stay.disabled = True
+            self.double_down.disabled = True
+            balance -= self.amount
+            collection.update_one(
+                {"_id": interaction.user.id}, {"$set": {"balance": balance}}
+            )
+
+            self.embed.add_field(name="Result", value="Lose", inline=False)
+            self.embed.add_field(
+                name="Prev Balance", value=f"${prev_balance:,.2f}", inline=True
+            )
+
+            self.embed.add_field(
+                name="New Balance", value=f"${balance:,.2f}", inline=True
+            )
+            new_balance = balance - prev_balance
+            if new_balance >= 0:
+                self.embed.add_field(
+                    name="Result", value=f"+${abs(new_balance):,.2f}", inline=True
+                )
+
+            else:
+                self.embed.add_field(
+                    name="Result", value=f"-${abs(new_balance):,.2f}", inline=True
+                )
+                await interaction.followup.edit_message(
+                    message_id=interaction.message.id, embed=self.embed, view=self
+                )
+        else:
+            self.amount *= 2
+            balance -= self.amount
+            collection.update_one(
+                {"_id": interaction.user.id}, {"$set": {"balance": balance}}
+            )
+            await self.result(interaction, button)
 
     async def result(self, interaction: discord.Interaction, button: discord.ui.Button):
         prev_balance, balance = balance_of_player(interaction.user)
@@ -387,6 +416,7 @@ class BlackjackButton(discord.ui.View):
         )
         self.hit.disabled = True
         self.stay.disabled = True
+        self.double_down.disabled = True
         while self.dealer_cards[1] <= 16:
             new_card = random_card()
             self.dealer_cards[0].append(new_card[1])

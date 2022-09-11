@@ -1,10 +1,10 @@
-from datetime import datetime, timezone
+from datetime import datetime
 from discord import ButtonStyle, app_commands
 from discord.ext import commands
 from discord.ui import Button, View
 from dotenv import load_dotenv
 from pymongo import MongoClient
-from typing import Literal, Union, NamedTuple, Optional
+from typing import Optional
 import discord
 import os
 
@@ -137,7 +137,7 @@ class Profile(commands.Cog):
         for result in user:
             balance = result["balance"]
         await interaction.response.defer()
-        await interaction.followup.send(f"💳{member.mention} has ${balance:,.2f}")
+        await interaction.followup.send(f"💳 {member.mention} has ${balance:,.2f}")
 
 
 async def setup(bot: commands.Bot) -> None:

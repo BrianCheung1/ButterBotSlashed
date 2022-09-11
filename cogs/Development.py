@@ -24,16 +24,16 @@ class Development(commands.Cog):
         interaction: discord.Interaction,
         cog: Optional[
             Literal[
-                "Development",
-                "Economy",
-                "Errors",
-                "Games",
-                "General",
-                "Gifs",
-                "Math",
-                "Minecraft",
-                "Profile",
-                "Test",
+                "development",
+                "economy",
+                "errors",
+                "games",
+                "general",
+                "gifs",
+                "math",
+                "minecraft",
+                "profile",
+                "test",
             ]
         ] = None,
     ):
@@ -45,7 +45,7 @@ class Development(commands.Cog):
                     await self.bot.reload_extension(f"cogs.{filename[:-3]}")
             await interaction.followup.send("Cogs Reloaded", ephemeral=True)
         else:
-            await self.bot.reload_extension(f"cogs.{cog.title()}")
+            await self.bot.reload_extension(f"cogs.{cog}")
             await interaction.followup.send(f"{cog.title()} Reloaded", ephemeral=True)
 
     @commands.Cog.listener()
