@@ -7,6 +7,7 @@ import discord
 import os
 import random
 
+from utils.balance import balance_of_player
 
 load_dotenv()
 list_of_guilds = os.getenv("GUILDS").split(",")
@@ -35,26 +36,13 @@ class Economy(commands.Cog):
         amount: Optional[app_commands.Range[int, 1, None]] = 1000,
     ):
         await interaction.response.defer()
-        if not member:
-            member = interaction.user
-        search = {"_id": member.id}
-        user = collection.find(search)
-        if collection.count_documents(search) == 0:
-            post = {"_id": member.id, "balance": 1000}
-            collection.insert_one(post)
+        prev_balance, balance = balance_of_player(member)
         if interaction.user.guild_permissions.administrator:
-            for result in user:
-                balance = float(result["balance"])
             balance += amount
             collection.update_one({"_id": member.id}, {"$set": {"balance": balance}})
             await interaction.followup.send(f"{member.mention} now has ${balance:,.2f}")
         else:
-            for result in user:
-                balance = result["balance"]
-            search = {"_id": interaction.user.id}
-            user = collection.find(search)
-            for result in user:
-                user_balance = result["balance"]
+            prev_balance, user_balance = balance(interaction.user)
             if amount > user_balance:
                 await interaction.followup.send(
                     f"{member.mention} is too broke to give away money - they only have {user_balance:,.2f}"
@@ -70,7 +58,6 @@ class Economy(commands.Cog):
                     {"_id": interaction.user.id},
                     {"$set": {"balance": user_balance}},
                 )
-
                 await interaction.followup.send(
                     f"{member.mention} now has ${balance:,}"
                 )
@@ -84,14 +71,7 @@ class Economy(commands.Cog):
         rare_ores = ["diamond", "emerald", "mythril", "sponge"]
         epic_ores = ["ancient debris", "dragon egg", "nether star"]
 
-        search = {"_id": interaction.user.id}
-        if collection.count_documents(search) == 0:
-            post = {"_id": interaction.user.id, "balance": 1000}
-            collection.insert_one(post)
-        user = collection.find(search)
-        for result in user:
-            balance = float(result["balance"])
-            prev_balance = balance
+        prev_balance, balance = balance_of_player(interaction.user)
 
         await interaction.response.defer()
         choice = random.randint(0, 101)
