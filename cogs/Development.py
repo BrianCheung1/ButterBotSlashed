@@ -32,6 +32,7 @@ class Development(commands.Cog):
                 "gifs",
                 "math",
                 "minecraft",
+                "moderation",
                 "profile",
                 "test",
             ]

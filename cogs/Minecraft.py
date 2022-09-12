@@ -83,7 +83,7 @@ class Minecraft(commands.Cog):
             ping = json.loads(url2.text)["response"]
             if players_online != 1:
                 self.minecraft_status = (
-                    f"Minecraft Server - {players_online} players online"
+                    f"Minecraft Server - {players_online} players online {ping}ms"
                 )
             self.minecraft_status = (
                 f"Minecraft Server - {players_online} player online - {ping}ms"
