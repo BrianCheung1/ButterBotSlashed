@@ -215,6 +215,16 @@ class Games(commands.Cog):
             embed=fight_helper(interaction, member), content=content, view=view
         )
 
+    @app_commands.command(name="slots", description="Spins a slot machine")
+    async def slot(
+        self,
+        interaction: discord.Interaction,
+        amount: Optional[app_commands.Range[int, 1, None]] = 100,
+    ):
+        view = SlotsButton(interaction, amount)
+        content, embed = slots_helper(interaction, amount)
+        await interaction.response.send_message(content=content, embed=embed, view=view)
+
 
 class GamesList(discord.ui.View):
     def __init__(self):
@@ -749,6 +759,34 @@ class FightButton(discord.ui.View):
         )
 
 
+class SlotsButton(discord.ui.View):
+    def __init__(
+        self,
+        interaction: discord.Interaction,
+        amount: Optional[app_commands.Range[int, 1, None]],
+    ):
+        super().__init__(timeout=None)
+        self.amount = amount
+        self.interaction = interaction
+
+    # this function must return a boolean, or to the very least a truthy/falsey value.
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+
+        if self.interaction.user.id != interaction.user.id:
+            await interaction.response.send_message(
+                "Please start your own game with /slots", ephemeral=True
+            )
+            return False
+        return True
+
+    @discord.ui.button(label="Spin Again", style=discord.ButtonStyle.red)
+    async def spin_again(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        content, embed = slots_helper(interaction, self.amount)
+        await interaction.response.edit_message(content=content, embed=embed, view=self)
+
+
 def gamble_helper(interaction: discord.Interaction, amount: Optional[int]):
     prev_balance, balance = balance_of_player(interaction.user)
     win = ""
@@ -834,6 +872,64 @@ def fight_helper(interaction: discord.interactions, member: discord.Member):
         name=f"{member.display_name} Health Bar", value=f"{enemy_health}", inline=True
     )
     return embed
+
+
+def slots_helper(
+    interaction: discord.Interaction, amount: Optional[app_commands.Range[int, 1, None]]
+):
+    prev_balance, balance = balance_of_player(interaction.user)
+    board2 = ""
+    if amount > balance:
+        embed = discord.Embed(
+            title="Not enough balance", description=f"${amount:,.2f} bet"
+        )
+        embed.add_field(name="Needed Balance", value=f"${amount:,.2f}", inline=True)
+        embed.add_field(name="Balance", value=f"${balance:,.2f}", inline=True)
+        return board2, embed
+    emojis = "🍎🍊🍐🍋🍉🍇🍓🍒🍑🍅"
+    board = [
+        random.choice(emojis),
+        random.choice(emojis),
+        random.choice(emojis),
+        random.choice(emojis),
+        random.choice(emojis),
+        random.choice(emojis),
+        random.choice(emojis),
+        random.choice(emojis),
+        random.choice(emojis),
+    ]
+
+    for index, item in enumerate(board, start=1):
+        board2 += item + " "
+        if index % 3 == 0:
+            board2 += "\n"
+    embed = discord.Embed(title="Slots", description=f"${amount} bet")
+    if (
+        board[0] == board[1] == board[2]
+        or board[3] == board[4] == board[5]
+        or board[6] == board[7] == board[8]
+    ):
+        balance += amount * 2
+        embed.add_field(
+            name="Result",
+            value=f"3 in a line - ${amount*2} won - New Balance ${balance}",
+            inline=False,
+        )
+    elif board.count("🍒") >= 2 or board.count("🍐") >= 3 or board.count("🍉") >= 3:
+        balance += amount
+        embed.add_field(
+            name="Result",
+            value=f"2 special fruits - ${amount} won - New Balance ${balance} ",
+            inline=False,
+        )
+    else:
+        balance -= amount
+        embed.add_field(
+            name="Result", value=f"No matches - New Balance ${balance}", inline=False
+        )
+
+    collection.update_one({"_id": interaction.user.id}, {"$set": {"balance": balance}})
+    return board2, embed
 
 
 async def setup(bot: commands.Bot) -> None:
