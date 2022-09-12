@@ -15,7 +15,6 @@ MY_GUILDS = [discord.Object(id=int(guild)) for guild in list_of_guilds]
 SERVER_DIRECTORY = os.getenv("SERVER_DIRECTORY")
 
 
-
 class Minecraft(commands.Cog):
     """Basic Features"""
 
@@ -31,12 +30,16 @@ class Minecraft(commands.Cog):
         url = requests.get(
             f"https://minecraft-api.com/api/ping/{IP}/25565/json", timeout=100
         )
+        url2 = requests.get(
+            f"https://minecraft-api.com/api/ping/response/{IP}/25565/json", timeout=100
+        )
         if not url.text.__contains__("players"):
             await interaction.response.send_message("Server is offline")
         else:
             text = json.loads(url.text)
             modpack_name = text["modpackData"]["name"]
             minecraft_version = text["version"]["name"]
+            ping = json.loads(url2.text)["response"]
             players_online = text["players"]["online"]
             all_players = ""
             if players_online != 0:
@@ -49,6 +52,7 @@ class Minecraft(commands.Cog):
             embed.add_field(
                 name="Minecraft Version", value=minecraft_version, inline=True
             )
+            embed.add_field(name="Ping", value=f"{ping}ms", inline=False)
             embed.add_field(
                 name=f"Players Online - {players_online}",
                 value=all_players,
@@ -68,16 +72,22 @@ class Minecraft(commands.Cog):
         url = requests.get(
             f"https://minecraft-api.com/api/ping/{IP}/25565/json", timeout=100
         )
+        url2 = requests.get(
+            f"https://minecraft-api.com/api/ping/response/{IP}/25565/json", timeout=100
+        )
         if not url.text.__contains__("players"):
             self.minecraft_status = "Offline - 😔"
         else:
             text = json.loads(url.text)
             players_online = text["players"]["online"]
+            ping = json.loads(url2.text)["response"]
             if players_online != 1:
                 self.minecraft_status = (
                     f"Minecraft Server - {players_online} players online"
                 )
-            self.minecraft_status = f"Minecraft Server - {players_online} player online"
+            self.minecraft_status = (
+                f"Minecraft Server - {players_online} player online - {ping}ms"
+            )
         await self.bot.change_presence(
             activity=discord.Activity(
                 type=discord.ActivityType.watching, name=self.minecraft_status
@@ -94,11 +104,12 @@ class Minecraft(commands.Cog):
         await interaction.response.defer()
         await interaction.followup.send("server starting")
         self.server = subprocess.Popen(
-            f'powershell.exe -ExecutionPolicy RemoteSigned -file {SERVER_DIRECTORY}',
+            f"powershell.exe -ExecutionPolicy RemoteSigned -file {SERVER_DIRECTORY}",
             shell=True,
             stdin=subprocess.PIPE,
             text=True,
         )
+
 
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(Minecraft(bot), guilds=MY_GUILDS)
