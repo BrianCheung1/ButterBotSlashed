@@ -107,7 +107,9 @@ class Economy(commands.Cog):
     async def leaderboard(self, interaction: discord.Interaction):
         await interaction.response.defer()
         top_members = {}
-        count = 1
+        count = 0
+        page_count = 1
+        pages = []
         for member in interaction.guild.members:
             search = {"_id": member.id}
             if collection.count_documents(search) != 0:
@@ -121,15 +123,64 @@ class Economy(commands.Cog):
         sorted_top_members = dict(
             sorted(top_members.items(), key=lambda item: item[1], reverse=True)
         )
-        embed = discord.Embed(title=f"{interaction.guild.name} Leaderboard")
+        embed_page_count = discord.Embed(title=f"{interaction.guild.name} Leaderboard")
+        embed_page_count.set_footer(text=f"Page {page_count}" , icon_url=interaction.user.display_avatar)
         for member, balance in sorted_top_members.items():
-            embed.add_field(
-                name=f"{count}. {member}", value=f"${float(balance):,.2f}", inline=False
+            embed_page_count.add_field(
+                name=f"{count+1}. {member}",
+                value=f"${float(balance):,.2f}",
+                inline=False,
             )
             count += 1
-            if count > 10:
-                break
-        await interaction.followup.send(embed=embed)
+            if count % 10 == 0:
+                pages.append(embed_page_count)
+                page_count += 1
+                embed_page_count = discord.Embed(
+                    title=f"{interaction.guild.name} Leaderboard"
+                )
+                embed_page_count.set_footer(text=f"Page {page_count}", icon_url=interaction.user.display_avatar)
+        pages.append(embed_page_count)
+        view = LeaderboardButton(interaction, pages)
+        await interaction.followup.send(embed=pages[0], view=view)
+
+
+class LeaderboardButton(discord.ui.View):
+    def __init__(self, interaction: discord.Interaction, pages: list):
+        super().__init__(timeout=None)
+        self.interaction = interaction
+        self.pages = pages
+        self.count = 0
+        self.prev_page.disabled = True
+
+    # this function must return a boolean, or to the very least a truthy/falsey value.
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+
+        if self.interaction.user.id != interaction.user.id:
+            await interaction.response.send_message(
+                "Please start your own game with /slots", ephemeral=True
+            )
+            return False
+        return True
+
+    @discord.ui.button(label="Previous Page", style=discord.ButtonStyle.red)
+    async def prev_page(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        self.next_page.disabled = False
+        self.count -= 1
+        if self.count <= 0:
+            self.prev_page.disabled = True
+        await interaction.response.edit_message(embed=self.pages[self.count], view=self)
+
+    @discord.ui.button(label="Next Page", style=discord.ButtonStyle.red)
+    async def next_page(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        self.prev_page.disabled = False
+        self.count += 1
+        if self.count >= len(self.pages) - 1:
+            self.next_page.disabled = True
+        await interaction.response.edit_message(embed=self.pages[self.count], view=self)
 
 
 async def setup(bot: commands.Bot) -> None:
