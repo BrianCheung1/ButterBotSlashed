@@ -124,7 +124,9 @@ class Economy(commands.Cog):
             sorted(top_members.items(), key=lambda item: item[1], reverse=True)
         )
         embed_page_count = discord.Embed(title=f"{interaction.guild.name} Leaderboard")
-        embed_page_count.set_footer(text=f"Page {page_count}" , icon_url=interaction.user.display_avatar)
+        embed_page_count.set_footer(
+            text=f"Page {page_count}", icon_url=interaction.user.display_avatar
+        )
         for member, balance in sorted_top_members.items():
             embed_page_count.add_field(
                 name=f"{count+1}. {member}",
@@ -138,7 +140,9 @@ class Economy(commands.Cog):
                 embed_page_count = discord.Embed(
                     title=f"{interaction.guild.name} Leaderboard"
                 )
-                embed_page_count.set_footer(text=f"Page {page_count}", icon_url=interaction.user.display_avatar)
+                embed_page_count.set_footer(
+                    text=f"Page {page_count}", icon_url=interaction.user.display_avatar
+                )
         pages.append(embed_page_count)
         view = LeaderboardButton(interaction, pages)
         await interaction.followup.send(embed=pages[0], view=view)
@@ -153,14 +157,14 @@ class LeaderboardButton(discord.ui.View):
         self.prev_page.disabled = True
 
     # this function must return a boolean, or to the very least a truthy/falsey value.
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+    # async def interaction_check(self, interaction: discord.Interaction) -> bool:
 
-        if self.interaction.user.id != interaction.user.id:
-            await interaction.response.send_message(
-                "Please start your own game with /slots", ephemeral=True
-            )
-            return False
-        return True
+    #     if self.interaction.user.id != interaction.user.id:
+    #         await interaction.response.send_message(
+    #             "Please start your own game with /slots", ephemeral=True
+    #         )
+    #         return False
+    #     return True
 
     @discord.ui.button(label="Previous Page", style=discord.ButtonStyle.red)
     async def prev_page(

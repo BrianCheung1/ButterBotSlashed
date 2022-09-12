@@ -26,7 +26,7 @@ class Errors(commands.Cog):
     # -> Option 1 ---
     # the global error handler for all app commands (slash & ctx menus)
     async def on_app_command_error(
-        self, interaction: Interaction, error: AppCommandError
+        self, interaction: discord.Interaction, error: AppCommandError
     ):
         await interaction.response.defer()
         if isinstance(error, CommandNotFound):
@@ -45,9 +45,9 @@ class Errors(commands.Cog):
                 ephemeral=True,
             )
         else:
-            await interaction.followup.send(
-                f"Error with Command - {error}", ephemeral=True
-            )
+            await interaction.followup.send(f"Something went wrong", ephemeral=True)
+            print(error)
+
 
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(Errors(bot), guilds=MY_GUILDS)
