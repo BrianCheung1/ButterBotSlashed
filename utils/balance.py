@@ -18,4 +18,4 @@ def balance_of_player(member: discord.member):
     for result in user:
         balance = result["balance"]
         prev_balance = balance
-    return int(prev_balance), int(balance)
+    return prev_balance, balance

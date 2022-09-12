@@ -49,20 +49,6 @@ class Errors(commands.Cog):
                 f"Error with Command - {error}", ephemeral=True
             )
 
-    # -> Option 2 ---
-    # the error handler for slash commands in this cog
-    # async def cog_app_command_error(
-    #     self,
-    #     interaction: Interaction,
-    #     error: AppCommandErro
-    # ):
-    #     print("This error was handled with option 2 from ?tag treeerrorcog")
-    #     ...
-
-
-# add and load the cog like normal
-
-
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(Errors(bot), guilds=MY_GUILDS)
     print("Errors is Loaded")

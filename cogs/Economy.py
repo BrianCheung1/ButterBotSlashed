@@ -42,7 +42,7 @@ class Economy(commands.Cog):
             collection.update_one({"_id": member.id}, {"$set": {"balance": balance}})
             await interaction.followup.send(f"{member.mention} now has ${balance:,.2f}")
         else:
-            prev_balance, user_balance = balance(interaction.user)
+            prev_balance, user_balance = balance_of_player(interaction.user)
             if amount > user_balance:
                 await interaction.followup.send(
                     f"{member.mention} is too broke to give away money - they only have {user_balance:,.2f}"
@@ -88,7 +88,7 @@ class Economy(commands.Cog):
         if choice >= 80 and choice < 95:
             balance += random.randint(250, 500)
             mining_result = random.choice(rare_ores)
-        if choice >= 95 and choice < 100:
+        if choice >= 95 and choice <= 100:
             balance += random.randint(500, 750)
             mining_result = random.choice(epic_ores)
         if choice == 101:
