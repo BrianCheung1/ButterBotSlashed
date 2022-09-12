@@ -886,7 +886,7 @@ def slots_helper(
         embed.add_field(name="Needed Balance", value=f"${amount:,.2f}", inline=True)
         embed.add_field(name="Balance", value=f"${balance:,.2f}", inline=True)
         return board2, embed
-    emojis = "🍎🍊🍐🍋🍉🍇🍓🍒🍑🍅"
+    emojis = "🍎🍊🍐🍋🍉🍇🍓🍒"
     board = [
         random.choice(emojis),
         random.choice(emojis),
@@ -908,24 +908,45 @@ def slots_helper(
         board[0] == board[1] == board[2]
         or board[3] == board[4] == board[5]
         or board[6] == board[7] == board[8]
+        or board[0] == board[4] == board[8]
+        or board[2] == board[4] == board[6]
+        or board[0] == board[3] == board[6]
+        or board[1] == board[4] == board[7]
+        or board[2] == board[5] == board[8]
     ):
+        balance += amount * 3
+        embed.add_field(
+            name="Result",
+            value=f"3 in a line - ${amount*3:,.2f} won - New Balance ${balance:,.2f}",
+            inline=False,
+        )
+    elif board.count("🍒") == 3 or board.count("🍐") == 3 or board.count("🍉") == 3:
+        balance += amount * 1.5
+        embed.add_field(
+            name="Result",
+            value=f"3 special fruits - ${amount*1.5:,.2f} won - New Balance ${balance:,.2f} ",
+            inline=False,
+        )
+    elif board.count("🍒") == 4 or board.count("🍐") == 4 or board.count("🍉") == 4:
         balance += amount * 2
         embed.add_field(
             name="Result",
-            value=f"3 in a line - ${amount*2} won - New Balance ${balance}",
+            value=f"4 special fruits - ${amount*2:,.2f} won - New Balance ${balance:,.2f} ",
             inline=False,
         )
-    elif board.count("🍒") >= 2 or board.count("🍐") >= 3 or board.count("🍉") >= 3:
-        balance += amount
+    elif board.count("🍒") >= 5 or board.count("🍐") >= 5 or board.count("🍉") >= 5:
+        balance += amount * 2.5
         embed.add_field(
             name="Result",
-            value=f"2 special fruits - ${amount} won - New Balance ${balance} ",
+            value=f"5 or more special fruits - ${amount*2.5:,.2f} won - New Balance ${balance:,.2f} ",
             inline=False,
         )
     else:
         balance -= amount
         embed.add_field(
-            name="Result", value=f"No matches - New Balance ${balance}", inline=False
+            name="Result",
+            value=f"No matches - New Balance ${balance:,.2f}",
+            inline=False,
         )
 
     collection.update_one({"_id": interaction.user.id}, {"$set": {"balance": balance}})
