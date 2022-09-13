@@ -7,12 +7,16 @@ ButterBotSlashed is an open-source discord bot
   -  Profile
   -  Minecraft server status
   -  Games
-    -  Blackjack
-    -  Rolling higher or lower
-    -  Mining blocks/ores
+      -  Blackjack
+      -  Rolling higher or lower
+      -  Slots
+      -  Mining blocks/ores
   -  Economy
-    -  Giving money to one another
-    -  Leaderboard for richest members
+      -  Giving money to another member
+      -  Leaderboard for richest members
+  -  Moderation
+      - Deleting Messages
+      - Giving Roles to members
   -  Simple math commands
   -  Logging messages to console
   -  Googling
@@ -28,7 +32,7 @@ git clone https://github.com/BrianCheung1/ButterBotSlashed.git
 
 python3 -m venv bot-env
 
-source bot-env/bin/activate
+source bot-env/scripts/activate
 
 pip install -r requirements.txt
 
