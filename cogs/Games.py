@@ -378,11 +378,15 @@ class BlackjackButton(discord.ui.View):
     async def double_down(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
+
         prev_balance, balance = balance_of_player(interaction.user)
         prev_balance += self.amount
         balance += self.amount
         collection.update_one(
             {"_id": interaction.user.id}, {"$set": {"balance": balance}}
+        )
+        blackjacks_won, blackjacks_lost, blackjacks_played = blackjack_stats(
+            interaction.user
         )
         await interaction.response.defer()
         # Player will receive one card and results be determined
