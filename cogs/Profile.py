@@ -7,6 +7,7 @@ from pymongo import MongoClient
 from typing import Optional
 import discord
 import os
+from utils.stats import balance_of_player
 
 load_dotenv()
 list_of_guilds = os.getenv("GUILDS").split(",")
@@ -73,13 +74,7 @@ class Profile(commands.Cog):
         embed.add_field(name="Days in Server", value=f"{days_in_server}", inline=True)
         embed.add_field(name="Activity", value=f"{member.activity}", inline=True)
 
-        search = {"_id": member.id}
-        if collection.count_documents(search) == 0:
-            post = {"_id": member.id, "balance": 1000}
-            collection.insert_one(post)
-        user = collection.find(search)
-        for result in user:
-            balance = result["balance"]
+        prev_balance, balance = balance_of_player(member)
 
         embed.add_field(name="Balance", value=f"${float(balance):,.2f}", inline=True)
         embed.add_field(name=f"Roles - {count}", value=f"{all_roles}", inline=False)
@@ -97,18 +92,28 @@ class Profile(commands.Cog):
 
         await interaction.response.send_message(embed=embed, view=view)
 
-    @app_commands.command(name="server-info", description="Shows information about the server")
+    @app_commands.command(
+        name="server-info", description="Shows information about the server"
+    )
     async def server_info(self, interaction: discord.Interaction):
-        """Shows information about the server """
+        """Shows information about the server"""
         server = interaction.user.guild
         embed = discord.Embed(title=f"Information about {server.name}")
         embed.add_field(name="Owner 👑", value=server.owner, inline=True)
         embed.add_field(name="Server ID", value=server.id, inline=True)
-        embed.add_field(name="Server Creation Date", value=f"{discord.utils.format_dt(server.created_at)}", inline=False)
+        embed.add_field(
+            name="Server Creation Date",
+            value=f"{discord.utils.format_dt(server.created_at)}",
+            inline=False,
+        )
 
-        embed.add_field(name="Voice Channels", value=f"{len(server.voice_channels)}", inline=True)
+        embed.add_field(
+            name="Voice Channels", value=f"{len(server.voice_channels)}", inline=True
+        )
 
-        embed.add_field(name="Text Channels", value=f"{len(server.text_channels)}", inline=True)
+        embed.add_field(
+            name="Text Channels", value=f"{len(server.text_channels)}", inline=True
+        )
 
         embed.add_field(name="Members", value=server.member_count, inline=True)
         role_names = [role.mention for role in server.roles[1:]]

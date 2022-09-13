@@ -7,7 +7,7 @@ import discord
 import os
 import random
 
-from utils.balance import balance_of_player
+from utils.stats import balance_of_player
 
 load_dotenv()
 list_of_guilds = os.getenv("GUILDS").split(",")
