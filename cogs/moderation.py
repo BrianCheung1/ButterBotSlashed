@@ -26,6 +26,7 @@ class Moderation(commands.Cog):
     @app_commands.describe(
         amount="amount of messages to purge default 5, min - 1, max - 100"
     )
+    @app_commands.checks.has_permissions(moderate_members=True)
     async def purge(
         self,
         interaction: discord.Interaction,
@@ -48,6 +49,7 @@ class Moderation(commands.Cog):
         member="member you want to give a role to",
         role="role you want to give to a member",
     )
+    @app_commands.checks.has_permissions(moderate_members=True)
     async def role(
         self,
         interaction: discord.Interaction,
@@ -64,6 +66,22 @@ class Moderation(commands.Cog):
             await interaction.response.send_message(
                 f"{role.mention} role given to {member.mention}"
             )
+
+    @app_commands.command(
+        name="mute", description="Mutes a member in the voice channel"
+    )
+    @app_commands.checks.has_permissions(moderate_members=True)
+    async def mute(self, interaction: discord.Interaction, member: discord.Member):
+        await member.edit(mute=True)
+        await interaction.response.send_message(f"{member.mention} has been muted")
+
+    @app_commands.command(
+        name="unmute", description="Unmutes a member in the voice channel"
+    )
+    @app_commands.checks.has_permissions(moderate_members=True)
+    async def unmute(self, interaction: discord.Interaction, member: discord.Member):
+        await member.edit(mute=False)
+        await interaction.response.send_message(f"{member.mention} has been unmuted")
 
 
 async def setup(bot: commands.Bot) -> None:

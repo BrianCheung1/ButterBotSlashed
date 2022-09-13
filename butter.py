@@ -15,7 +15,10 @@ CLIENT_ID = os.getenv("ID")
 class MyBot(commands.Bot):
     def __init__(self):
         super().__init__(
-            command_prefix="`", intents=discord.Intents.all(), application_id=CLIENT_ID
+            command_prefix="`",
+            intents=discord.Intents.all(),
+            application_id=CLIENT_ID,
+            help_command=None,
         )
 
     async def setup_hook(self) -> None:

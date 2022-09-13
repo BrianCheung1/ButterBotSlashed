@@ -98,7 +98,7 @@ class Minecraft(commands.Cog):
     async def before_my_task(self):
         await self.bot.wait_until_ready()  # wait until the bot logs in
 
-    @app_commands.command(name="start")
+    @app_commands.command(name="start", description="Starts the minecraft server")
     async def start(self, interaction: discord.Interaction):
         # os.chdir(os.getenv("SERVER_DIRECTORY"))
         await interaction.response.defer()
