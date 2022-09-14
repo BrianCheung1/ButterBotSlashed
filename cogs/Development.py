@@ -113,7 +113,13 @@ class Development(commands.Cog):
         )
         embed.add_field(name="Total Servers", value=f"{guild_count}", inline=True)
         embed.add_field(name="Total Members", value=f"{user_count}", inline=True)
-        # embed.add_field(name="Uptime", value=f"{start_time}", inline=False)
+
+        uptime = datetime.now() - self.bot.start_time
+        hours, remainder = divmod(int(uptime.total_seconds()), 3600)
+        minutes, seconds = divmod(remainder, 60)
+        days, hours = divmod(hours, 24)
+        duration_formatted = f"{days}D:{hours}H:{minutes}M"
+        embed.add_field(name="Uptime", value=f"{duration_formatted}", inline=False)
 
         embed.add_field(
             name="Discord.py Version", value=f"{discord.__version__}", inline=True

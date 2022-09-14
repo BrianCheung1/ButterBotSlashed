@@ -29,7 +29,7 @@ class MyBot(commands.Bot):
             await self.tree.sync(guild=discord.Object(int(guild.id)))
 
     async def on_ready(self):
-        
+
         print("------")
         print(f'\n{figlet_format("ButterBot", "standard")}')
         print(f'{datetime.now().strftime("Date: %D")}')
@@ -40,8 +40,7 @@ class MyBot(commands.Bot):
 
 
 bot = MyBot()
-
-
+bot.start_time = datetime.now()
 # @bot.tree.error
 # async def on_app_command_error(
 #     interaction: Interaction,
