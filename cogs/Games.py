@@ -5,7 +5,7 @@ from discord.app_commands import Choice
 from discord.ext import commands
 from dotenv import load_dotenv
 from pymongo import MongoClient
-from typing import Optional
+from typing import Optional, Literal
 import discord
 import os
 import random
@@ -95,15 +95,19 @@ class Games(commands.Cog):
     @app_commands.command(
         name="gamble", description="Chance to win or lose money - Default $100"
     )
-    @app_commands.describe(amount="Amount of money you want to gamble - Default $100")
+    @app_commands.describe(
+        amount="Amount of money you want to gamble - Default $100",
+        action="Choice for gambling all your money at once",
+    )
     async def gamble(
         self,
         interaction: discord.Interaction,
         amount: Optional[app_commands.Range[int, 1, None]] = 100,
+        action: Optional[Literal["All in"]] = None,
     ):
         await interaction.response.defer()
-        view = GamblingButton(interaction, amount)
-        embed = gamble_helper(interaction, amount)
+        view = GamblingButton(interaction, amount, action)
+        embed = gamble_helper(interaction, amount, action)
         await interaction.followup.send(embed=embed, view=view)
 
     @app_commands.command(
@@ -206,7 +210,7 @@ class Games(commands.Cog):
                     name="Result", value=f"${balance-prev_balance:,.2f}", inline=True
                 )
                 embed.set_footer(
-                    text=f"{blackjacks_won} blackjacks won, {blackjacks_lost} blackjacks lost, {blackjacks_played} blackjacks played"
+                    text=f"{blackjacks_won} blackjacks won, {blackjacks_lost} blackjacks lost, {blackjacks_played - blackjacks_won - blackjacks_lost} blackjacks tied, {blackjacks_played} blackjacks played"
                 )
                 await interaction.followup.send(embed=embed)
             # If player has no winning conditions
@@ -255,10 +259,11 @@ class GamesList(discord.ui.View):
 
 
 class GamblingButton(discord.ui.View):
-    def __init__(self, interaction: discord.Interaction, amount: Optional[int]):
+    def __init__(self, interaction: discord.Interaction, amount: Optional[int], action):
         super().__init__(timeout=None)
         self.amount = amount
         self.interaction = interaction
+        self.action = action
 
     # this function must return a boolean, or to the very least a truthy/falsey value.
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
@@ -274,7 +279,7 @@ class GamblingButton(discord.ui.View):
     async def play_again(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
-        embed = gamble_helper(interaction, self.amount)
+        embed = gamble_helper(interaction, self.amount, action)
         await interaction.response.edit_message(embed=embed, view=self)
 
 
@@ -363,7 +368,7 @@ class BlackjackButton(discord.ui.View):
                     name="Result", value=f"-${abs(new_balance):,.2f}", inline=True
                 )
             self.embed.set_footer(
-                text=f"{blackjacks_won} blackjacks won, {blackjacks_lost} blackjacks lost, {blackjacks_played} blackjacks played"
+                text=f"{blackjacks_won} blackjacks won, {blackjacks_lost} blackjacks lost, {blackjacks_played - blackjacks_won - blackjacks_lost} blackjacks tied, {blackjacks_played} blackjacks played"
             )
         await interaction.followup.edit_message(
             message_id=interaction.message.id, embed=self.embed, view=self
@@ -442,7 +447,7 @@ class BlackjackButton(discord.ui.View):
                     name="Result", value=f"-${abs(new_balance):,.2f}", inline=True
                 )
             self.embed.set_footer(
-                text=f"{blackjacks_won} blackjacks won, {blackjacks_lost} blackjacks lost, {blackjacks_played} blackjacks played"
+                text=f"{blackjacks_won} blackjacks won, {blackjacks_lost} blackjacks lost, {blackjacks_played - blackjacks_won - blackjacks_lost} blackjacks tied, {blackjacks_played} blackjacks played"
             )
             await interaction.followup.edit_message(
                 message_id=interaction.message.id, embed=self.embed, view=self
@@ -495,7 +500,7 @@ class BlackjackButton(discord.ui.View):
         if self.dealer_cards[1] > 21:
             self.embed.add_field(name="Result", value="Win", inline=False)
             balance += self.amount
-            blackjacks_lost += 1
+            blackjacks_won += 1
 
         elif "🇦" in self.player_cards[0] and "🇦" not in self.dealer_cards[0]:
             if (
@@ -648,7 +653,7 @@ class BlackjackButton(discord.ui.View):
             {"_id": interaction.user.id}, {"$set": {"blackjacks_lost": blackjacks_lost}}
         )
         self.embed.set_footer(
-            text=f"{blackjacks_won} blackjacks won, {blackjacks_lost} blackjacks lost, {blackjacks_played} blackjacks played"
+            text=f"{blackjacks_won} blackjacks won, {blackjacks_lost} blackjacks lost, {blackjacks_played - blackjacks_won - blackjacks_lost} blackjacks tied, {blackjacks_played} blackjacks played"
         )
         await interaction.followup.edit_message(
             message_id=interaction.message.id, embed=self.embed, view=self
@@ -833,11 +838,12 @@ class SlotsButton(discord.ui.View):
         await interaction.response.edit_message(content=content, embed=embed, view=self)
 
 
-def gamble_helper(interaction: discord.Interaction, amount: Optional[int]):
+def gamble_helper(interaction: discord.Interaction, amount: Optional[int], action):
     prev_balance, balance = balance_of_player(interaction.user)
     gambles_won, gambles_lost, gambles_played = gamble_stats(interaction.user)
     gambles_played += 1
-
+    if action:
+        amount = balance
     win = ""
     if amount > balance:
         embed = discord.Embed(
@@ -898,7 +904,7 @@ def gamble_helper(interaction: discord.Interaction, amount: Optional[int]):
             {"$set": {"gambles_played": gambles_played}},
         )
         embed.set_footer(
-            text=f"{gambles_won} gambles won, {gambles_lost} gambles lost, {gambles_played} gambles played"
+            text=f"{gambles_won} gambles won, {gambles_lost} gambles lost, {gambles_played - gambles_won - gambles_lost} gambles tied, {gambles_played} gambles played"
         )
         return embed
 
