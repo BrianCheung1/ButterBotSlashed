@@ -87,6 +87,7 @@ class Moderation(commands.Cog):
         name="self_role",
         description="creates an embed that allows other use to self-role",
     )
+    @app_commands.checks.has_permissions(moderate_members=True)
     async def self_role(self, interaction: discord.Interaction, role: discord.Role):
         embed = discord.Embed()
         embed.add_field(name=f"Role", value=f"{role.mention}")
