@@ -83,7 +83,41 @@ class Moderation(commands.Cog):
         await member.edit(mute=False)
         await interaction.response.send_message(f"{member.mention} has been unmuted")
 
-    
+    @app_commands.command(
+        name="self_role",
+        description="creates an embed that allows other use to self-role",
+    )
+    async def self_role(self, interaction: discord.Interaction, role: discord.Role):
+        embed = discord.Embed()
+        embed.add_field(name=f"Role", value=f"{role.mention}")
+        view = SelfRoleButton(role)
+        await interaction.response.send_message(embed=embed, view=view)
+
+
+class SelfRoleButton(discord.ui.View):
+    def __init__(self, role: discord.Role):
+        super().__init__(timeout=None)
+        self.role = role
+
+    @discord.ui.button(label="Add Role", style=discord.ButtonStyle.red)
+    async def add_role(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        await interaction.user.add_roles(self.role)
+        await interaction.response.send_message(
+            content=f"{self.role.mention} added", ephemeral=True
+        )
+
+    @discord.ui.button(label="Remove Role", style=discord.ButtonStyle.red)
+    async def remove_role(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        await interaction.user.remove_roles(self.role)
+        await interaction.response.send_message(
+            content=f"{self.role.mention} Removed", ephemeral=True
+        )
+
+
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(Moderation(bot), guilds=MY_GUILDS)
     print("Moderation is Loaded")
