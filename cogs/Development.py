@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from typing import Literal, Optional
 import discord
 import os
+import platform
 
 load_dotenv()
 list_of_guilds = os.getenv("GUILDS").split(",")
@@ -92,6 +93,38 @@ class Development(commands.Cog):
 
             await self.bot.tree.sync()
             await interaction.followup.send(f"{len(self.bot.guilds)} servers synced")
+
+    @app_commands.command(name="stats", description="show stats of the bot")
+    async def stats(self, interaction: discord.Interaction):
+        guild_count = 0
+        user_count = 0
+        cog_count = 0
+        for guild in self.bot.guilds:
+            guild_count += 1
+            user_count += guild.member_count
+
+        for filename in os.listdir("cogs/"):
+            if filename.endswith(".py"):
+                cog_count += 1
+
+        embed = discord.Embed(title=f"{self.bot.user.display_name} stats")
+        embed.add_field(
+            name="Ping", value=f"{round(self.bot.latency*1000)}ms", inline=True
+        )
+        embed.add_field(name="Total Servers", value=f"{guild_count}", inline=True)
+        embed.add_field(name="Total Members", value=f"{user_count}", inline=True)
+        # embed.add_field(name="Uptime", value=f"{start_time}", inline=False)
+
+        embed.add_field(
+            name="Discord.py Version", value=f"{discord.__version__}", inline=True
+        )
+        embed.add_field(
+            name="Python Version", value=f"{platform.python_version()}", inline=True
+        )
+        embed.add_field(name="Total Cogs", value=f"{cog_count}", inline=False)
+        embed.set_thumbnail(url=self.bot.user.display_avatar)
+        embed.timestamp = datetime.now()
+        await interaction.response.send_message(embed=embed)
 
 
 async def setup(bot: commands.Bot) -> None:

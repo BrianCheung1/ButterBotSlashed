@@ -93,7 +93,7 @@ class Profile(commands.Cog):
         await interaction.response.send_message(embed=embed, view=view)
 
     @app_commands.command(
-        name="server-info", description="Shows information about the server"
+        name="server_info", description="Shows information about the server"
     )
     async def server_info(self, interaction: discord.Interaction):
         """Shows information about the server"""
@@ -131,16 +131,8 @@ class Profile(commands.Cog):
     async def balance(
         self, interaction: discord.Interaction, member: Optional[discord.Member]
     ):
-        if not member:
-            member = interaction.user
 
-        search = {"_id": member.id}
-        if collection.count_documents(search) == 0:
-            post = {"_id": member.id, "balance": 1000}
-            collection.insert_one(post)
-        user = collection.find(search)
-        for result in user:
-            balance = result["balance"]
+        prev_balance, balance = balance_of_player(member)
         await interaction.response.defer()
         await interaction.followup.send(f"💳 {member.mention} has ${balance:,.2f}")
 

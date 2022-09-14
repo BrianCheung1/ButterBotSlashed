@@ -29,6 +29,7 @@ class MyBot(commands.Bot):
             await self.tree.sync(guild=discord.Object(int(guild.id)))
 
     async def on_ready(self):
+        
         print("------")
         print(f'\n{figlet_format("ButterBot", "standard")}')
         print(f'{datetime.now().strftime("Date: %D")}')

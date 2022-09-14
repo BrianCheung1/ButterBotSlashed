@@ -25,7 +25,8 @@ class Gifs(commands.Cog):
     async def gif(self, interaction: discord.Interaction, query: str):
         """Sends a gif of your query"""
         r = requests.get(
-            f"https://tenor.googleapis.com/v2/search?q={query}&key={KEY}&client_key=butter&limit=50", timeout=100
+            f"https://tenor.googleapis.com/v2/search?q={query}&key={KEY}&client_key=butter&limit=50",
+            timeout=100,
         )
         if r.status_code == 200:
             # load the GIFs using the urls for the smaller GIF sizes
@@ -58,7 +59,7 @@ class Gifs(commands.Cog):
             await interaction.response.send_message("Emoji not in server")
 
     @app_commands.command(
-        name="random-emoji", description="Button to show random emojis in the server"
+        name="random_emoji", description="Button to show random emojis in the server"
     )
     async def random_emoji(self, interaction: discord.Interaction):
         view = Counter()

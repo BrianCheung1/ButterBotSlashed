@@ -83,7 +83,7 @@ class Moderation(commands.Cog):
         await member.edit(mute=False)
         await interaction.response.send_message(f"{member.mention} has been unmuted")
 
-
+    
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(Moderation(bot), guilds=MY_GUILDS)
     print("Moderation is Loaded")
