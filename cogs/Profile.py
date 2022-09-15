@@ -131,7 +131,8 @@ class Profile(commands.Cog):
     async def balance(
         self, interaction: discord.Interaction, member: Optional[discord.Member]
     ):
-
+        if not member:
+            member = interaction.user
         prev_balance, balance = balance_of_player(member)
         await interaction.response.defer()
         await interaction.followup.send(f"💳 {member.mention} has ${balance:,.2f}")

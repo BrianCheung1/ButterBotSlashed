@@ -127,11 +127,9 @@ class Games(commands.Cog):
         # checks balance of player
         # if balance is lower than amount being being cancel bet
         if amount > balance:
-            embed = discord.Embed(
-                title="Not enough balance", description=f"${amount:,} bet"
-            )
-            embed.add_field(name="Needed Balance", value=f"${amount:,}", inline=True)
-            embed.add_field(name="Balance", value=f"${balance:,}", inline=True)
+            embed = discord.Embed(title="Not enough balance")
+            embed.add_field(name="Needed Balance", value=f"${amount:,.2f}", inline=True)
+            embed.add_field(name="Balance", value=f"${balance:,.2f}", inline=True)
             await interaction.followup.send(embed=embed)
             return
         # if balance is greater than amount being bet
@@ -846,9 +844,7 @@ def gamble_helper(interaction: discord.Interaction, amount: Optional[int], actio
         amount = balance
     win = ""
     if amount > balance:
-        embed = discord.Embed(
-            title="Not enough balance", description=f"${amount:,.2f} bet"
-        )
+        embed = discord.Embed(title="Not enough balance")
         embed.add_field(name="Needed Balance", value=f"${amount:,.2f}", inline=True)
         embed.add_field(name="Balance", value=f"${balance:,.2f}", inline=True)
         return embed
@@ -953,9 +949,7 @@ def slots_helper(
     slots_played += 1
     board2 = ""
     if amount > balance:
-        embed = discord.Embed(
-            title="Not enough balance", description=f"${amount:,.2f} bet"
-        )
+        embed = discord.Embed(title="Not enough balance")
         embed.add_field(name="Needed Balance", value=f"${amount:,.2f}", inline=True)
         embed.add_field(name="Balance", value=f"${balance:,.2f}", inline=True)
         return board2, embed
