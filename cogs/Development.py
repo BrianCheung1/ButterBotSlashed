@@ -34,6 +34,7 @@ class Development(commands.Cog):
                 "math",
                 "minecraft",
                 "moderation",
+                "music",
                 "profile",
                 "test",
             ]
