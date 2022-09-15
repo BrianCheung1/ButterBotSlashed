@@ -101,7 +101,7 @@ class Music(commands.Cog):
             await interaction.followup.send(f"Now playing: {player.title}")
 
     @app_commands.command(name="volume", description="Change volume of bot")
-    @app_commands.command(volume="1-100% volume")
+    @app_commands.describe(volume="1-100% volume")
     async def volume(
         self, interaction: discord.Interaction, volume: app_commands.Range[int, 0, 100]
     ):
