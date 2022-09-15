@@ -71,6 +71,9 @@ class Music(commands.Cog):
     @app_commands.command(
         name="play", description="Plays a youtube url depending on user query"
     )
+    @app_commands.describe(
+        query="link to song you want played or general term to search for"
+    )
     async def play(
         self,
         interaction: discord.Interaction,
@@ -94,13 +97,11 @@ class Music(commands.Cog):
         else:
             interaction.guild.voice_client.play(
                 player,
-                after=lambda e: asyncio.run_coroutine_threadsafe(
-                    self.after_play(interaction), self.bot.loop
-                ),
             )
             await interaction.followup.send(f"Now playing: {player.title}")
 
     @app_commands.command(name="volume", description="Change volume of bot")
+    @app_commands.command(volume="1-100% volume")
     async def volume(
         self, interaction: discord.Interaction, volume: app_commands.Range[int, 0, 100]
     ):
@@ -113,8 +114,11 @@ class Music(commands.Cog):
 
     @app_commands.command(name="stop", description="disconnect the bot from the server")
     async def stop(self, interaction: discord.Interaction):
-        await interaction.guild.voice_client.disconnect()
-        await interaction.response.send_message("Music has stopped")
+        if interaction.guild.voice_client:
+            await interaction.guild.voice_client.disconnect()
+            await interaction.response.send_message("Music has stopped")
+        else:
+            await interaction.response.send_message("Not connected to a voice channel")
 
     @app_commands.command(name="queue", description="shows the queue of songs")
     async def queue(self, interaction: discord.Interaction):
