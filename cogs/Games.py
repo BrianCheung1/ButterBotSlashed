@@ -40,7 +40,7 @@ class Games(commands.Cog):
             "Games Channel: <#629459633031086080>", view=view
         )
 
-    @app_commands.command(name="add_game", description="add a game to games channel")
+    @app_commands.command(name="add_game", description="Add a game to games channel")
     @app_commands.describe(
         add="Adding or Updating a game",
         download_link="The google drive download link",
@@ -53,14 +53,14 @@ class Games(commands.Cog):
         ]
     )
     @app_commands.checks.has_permissions(moderate_members=True)
-    async def add(
+    async def add_game(
         self,
         interaction: discord.Interaction,
         add: str,
         download_link: str,
         steam_link: str,
     ):
-        """Adds two numbers together."""
+        """Easy embed for games download"""
 
         # bs4 to parse through steam link for data
         url = steam_link

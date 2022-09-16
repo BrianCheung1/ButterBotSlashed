@@ -7,7 +7,9 @@ from typing import Literal, Union, NamedTuple, Optional
 from urllib.parse import quote_plus
 import discord
 import os
+import tmdbsimple as tmdb
 
+tmdb.API_KEY = os.getenv("TMDB")
 
 load_dotenv()
 list_of_guilds = os.getenv("GUILDS").split(",")
@@ -41,6 +43,41 @@ class General(commands.Cog):
         await interaction.response.send_message(
             f"Google Result for: `{query}`", view=Google(query)
         )
+
+    @app_commands.command(name="movie", description="Shows information about a movie")
+    @app_commands.describe(query="Movie you want to search")
+    async def movie(self, interaction: discord.Interaction, query: str):
+        await interaction.response.defer()
+        search = tmdb.Search()
+        response = search.movie(query=query)
+        first_result = search.results[0]
+        movie = tmdb.Movies(first_result["id"])
+        genres = []
+        for genre in movie.info()["genres"]:
+            genres.append(genre["name"])
+        genres = ", ".join(genres)
+        embed = discord.Embed(
+            title=f"{movie.title}",
+            description=f"{movie.tagline}",
+            url=f"https://www.imdb.com/title/{movie.imdb_id}",
+        )
+        embed.add_field(name="Release Date", value=f"{movie.release_date}")
+        embed.add_field(name="Rating", value=f"{movie.vote_average:.2f}")
+        embed.add_field(name="original_language", value=f"{movie.original_language}")
+
+        hours = movie.runtime // 60
+        mins = movie.runtime % 60
+        converted_runtime = f"{hours}H{mins}M"
+        embed.add_field(name="Budget", value=f"${movie.budget:,.2f}")
+        embed.add_field(name="Revenue", value=f"${movie.revenue:,.2f}")
+        embed.add_field(name="Runtime", value=f"{converted_runtime}")
+
+        embed.add_field(name="Genres", value=f"{genres}")
+        embed.add_field(name="Overview", value=f"{movie.overview}", inline=False)
+        embed.set_image(
+            url=f"https://image.tmdb.org/t/p/original/{movie.backdrop_path}"
+        )
+        await interaction.followup.send(embed=embed)
 
 
 # Define a simple View that gives us a google link button.
