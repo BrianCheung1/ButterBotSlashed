@@ -8,7 +8,9 @@ from urllib.parse import quote_plus
 import discord
 import os
 import tmdbsimple as tmdb
+from AnilistPython import Anilist
 
+anilist = Anilist()
 tmdb.API_KEY = os.getenv("TMDB")
 
 load_dotenv()
@@ -50,6 +52,10 @@ class General(commands.Cog):
         await interaction.response.defer()
         search = tmdb.Search()
         response = search.movie(query=query)
+        if not search.results:
+            return await interaction.followup.send(
+                "No movies were found for your query"
+            )
         first_result = search.results[0]
         movie = tmdb.Movies(first_result["id"])
         genres = []
@@ -63,7 +69,7 @@ class General(commands.Cog):
         )
         embed.add_field(name="Release Date", value=f"{movie.release_date}")
         embed.add_field(name="Rating", value=f"{movie.vote_average:.2f}")
-        embed.add_field(name="original_language", value=f"{movie.original_language}")
+        embed.add_field(name="Original Language", value=f"{movie.original_language}")
 
         hours = movie.runtime // 60
         mins = movie.runtime % 60
@@ -71,13 +77,55 @@ class General(commands.Cog):
         embed.add_field(name="Budget", value=f"${movie.budget:,.2f}")
         embed.add_field(name="Revenue", value=f"${movie.revenue:,.2f}")
         embed.add_field(name="Runtime", value=f"{converted_runtime}")
-
         embed.add_field(name="Genres", value=f"{genres}")
-        embed.add_field(name="Overview", value=f"{movie.overview}", inline=False)
+        if movie.overview:
+            embed.add_field(name="Overview", value=f"{movie.overview}", inline=False)
         embed.set_image(
             url=f"https://image.tmdb.org/t/p/original/{movie.backdrop_path}"
         )
         await interaction.followup.send(embed=embed)
+
+    @app_commands.command(name="anime", description="Shows information about a anime")
+    @app_commands.describe(query="Anime you want to search")
+    async def anime(self, interaction: discord.Interaction, query: str):
+        try:
+            anime_dict = anilist.get_anime(query)
+        except IndexError as e:
+            return await interaction.response.send_message(
+                f"{e}, Please try changing your query"
+            )
+        embed = discord.Embed(
+            title=f'{anime_dict["name_romaji"]}', description=anime_dict["name_english"]
+        )
+        embed.add_field(name="Start Date", value=anime_dict["starting_time"])
+        embed.add_field(name="End Date", value=anime_dict["ending_time"])
+        embed.add_field(name="Season", value=anime_dict["season"])
+        embed.add_field(name="Status", value=anime_dict["airing_status"])
+
+        if anime_dict["next_airing_ep"]:
+            next_eps = anime_dict["next_airing_ep"]["airingAt"]
+            converted_time = datetime.fromtimestamp(next_eps).strftime("%D %I:%M:%S:%p")
+            embed.add_field(name="Next Eps", value=converted_time)
+        else:
+            embed.add_field(name="Next Eps", value="None")
+
+        embed.add_field(name="Score", value=anime_dict["average_score"])
+        embed.add_field(name="Total Eps", value=anime_dict["airing_episodes"])
+        if anime_dict["genres"]:
+            embed.add_field(
+                name="Genre", value=", ".join(anime_dict["genres"]), inline=False
+            )
+        if len(anime_dict["desc"]) > 1024:
+            anime_dict["desc"] = anime_dict["desc"][0:1000] + "..."
+        if not anime_dict["desc"]:
+            anime_dict["desc"] = "None"
+        embed.add_field(
+            name="Description",
+            value=anime_dict["desc"].replace("<br>", ""),
+            inline=False,
+        )
+        embed.set_image(url=anime_dict["banner_image"])
+        await interaction.response.send_message(embed=embed)
 
 
 # Define a simple View that gives us a google link button.
