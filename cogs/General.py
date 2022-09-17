@@ -59,6 +59,7 @@ class General(commands.Cog):
             view.add_item(MovieButton(index + 1, search.results[index]))
             if index >= 4:
                 break
+        view.add_item(MovieMenuButton(query, search.results))
         embed = discord.Embed()
         results = ""
         for index, result in enumerate(search.results):
@@ -131,11 +132,39 @@ class Google(discord.ui.View):
         self.add_item(discord.ui.Button(label="Click Here", url=url))
 
 
+class MovieMenuButton(discord.ui.Button):
+    def __init__(self, query, results):
+        super().__init__()
+        self.results = results
+        self.label = "Menu"
+        self.query = query
+        self.style = discord.ButtonStyle.primary
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        embed = discord.Embed()
+        results = ""
+        for index, result in enumerate(self.results):
+            results += f'{index+1}. **{result["title"]}**\n'
+            if index >= 4:
+                break
+        embed.add_field(name=f"Results for {self.query.title()}", value=results)
+        embed.timestamp = datetime.now()
+        embed.set_footer(
+            text=f"{interaction.user.display_name}",
+            icon_url=interaction.user.display_avatar,
+        )
+        await interaction.followup.edit_message(
+            message_id=interaction.message.id, embed=embed, view=self.view
+        )
+
+
 class MovieButton(discord.ui.Button):
     def __init__(self, label, results):
         super().__init__()
         self.results = results
         self.label = label
+        self.style = discord.ButtonStyle.primary
 
     async def callback(self, interaction: discord.Interaction):
 
