@@ -161,7 +161,8 @@ class MovieButton(discord.ui.Button):
         embed.add_field(name="Budget", value=f"${movie.budget:,.2f}")
         embed.add_field(name="Revenue", value=f"${movie.revenue:,.2f}")
         embed.add_field(name="Runtime", value=f"{converted_runtime}")
-        embed.add_field(name="Genres", value=f"{genres}")
+        if genres:
+            embed.add_field(name="Genres", value=f"{genres}")
         if movie.overview:
             embed.add_field(name="Overview", value=f"{movie.overview}", inline=False)
         embed.set_image(
