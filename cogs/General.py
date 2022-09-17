@@ -79,12 +79,15 @@ class General(commands.Cog):
     async def anime(self, interaction: discord.Interaction, query: str):
         try:
             anime_dict = anilist.get_anime(query)
+            anime_id = anilist.get_anime_id(anime_dict["name_romaji"])
         except IndexError as e:
             return await interaction.response.send_message(
                 f"{e}, Please try changing your query"
             )
         embed = discord.Embed(
-            title=f'{anime_dict["name_romaji"]}', description=anime_dict["name_english"]
+            title=f'{anime_dict["name_romaji"]}',
+            description=anime_dict["name_english"],
+            url=f"https://anilist.co/anime/{anime_id}",
         )
         embed.add_field(name="Start Date", value=anime_dict["starting_time"])
         embed.add_field(name="End Date", value=anime_dict["ending_time"])
@@ -93,8 +96,13 @@ class General(commands.Cog):
 
         if anime_dict["next_airing_ep"]:
             next_eps = anime_dict["next_airing_ep"]["airingAt"]
-            converted_time = datetime.fromtimestamp(next_eps).strftime("%D %I:%M:%S:%p")
-            embed.add_field(name="Next Eps", value=converted_time)
+            converted_time = datetime.fromtimestamp(next_eps).strftime("%D")
+            next_eps_air = anime_dict["next_airing_ep"]["timeUntilAiring"]
+            converted_time_air = convert(next_eps_air)
+            embed.add_field(
+                name="Next Eps", value=f"{converted_time}\n{converted_time_air}"
+            )
+
         else:
             embed.add_field(name="Next Eps", value="None")
 
@@ -110,7 +118,10 @@ class General(commands.Cog):
             anime_dict["desc"] = "None"
         embed.add_field(
             name="Description",
-            value=anime_dict["desc"].replace("<br>", ""),
+            value=anime_dict["desc"]
+            .replace("<br>", "")
+            .replace("<i>", "*")
+            .replace("</i>", "*"),
             inline=False,
         )
         embed.set_image(url=anime_dict["banner_image"])
@@ -201,6 +212,17 @@ class MovieButton(discord.ui.Button):
         await interaction.followup.edit_message(
             message_id=interaction.message.id, embed=embed, view=self.view
         )
+
+
+def convert(time):
+
+    day = time // (24 * 3600)
+    time = time % (24 * 3600)
+    hour = time // 3600
+    time %= 3600
+    minutes = time // 60
+    time %= 60
+    return "%dD:%dH:%dM" % (day, hour, minutes)
 
 
 async def setup(bot: commands.Bot) -> None:
