@@ -277,7 +277,7 @@ class GamblingButton(discord.ui.View):
     async def play_again(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
-        embed = gamble_helper(interaction, self.amount, action)
+        embed = gamble_helper(interaction, self.amount, self.action)
         await interaction.response.edit_message(embed=embed, view=self)
 
 

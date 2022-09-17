@@ -53,37 +53,25 @@ class General(commands.Cog):
         search = tmdb.Search()
         response = search.movie(query=query)
         if not search.results:
-            return await interaction.followup.send(
-                "No movies were found for your query"
-            )
-        first_result = search.results[0]
-        movie = tmdb.Movies(first_result["id"])
-        genres = []
-        for genre in movie.info()["genres"]:
-            genres.append(genre["name"])
-        genres = ", ".join(genres)
-        embed = discord.Embed(
-            title=f"{movie.title}",
-            description=f"{movie.tagline}",
-            url=f"https://www.imdb.com/title/{movie.imdb_id}",
+            await interaction.followup.send("No results for your query")
+        view = discord.ui.View()
+        for index, result in enumerate(search.results):
+            view.add_item(MovieButton(index + 1, search.results[index]))
+            if index >= 4:
+                break
+        embed = discord.Embed()
+        results = ""
+        for index, result in enumerate(search.results):
+            results += f'{index+1}. **{result["title"]}**\n'
+            if index >= 4:
+                break
+        embed.add_field(name=f"Results for {query.title()}", value=results)
+        embed.timestamp = datetime.now()
+        embed.set_footer(
+            text=f"{interaction.user.display_name}",
+            icon_url=interaction.user.display_avatar,
         )
-        embed.add_field(name="Release Date", value=f"{movie.release_date}")
-        embed.add_field(name="Rating", value=f"{movie.vote_average:.2f}")
-        embed.add_field(name="Original Language", value=f"{movie.original_language}")
-
-        hours = movie.runtime // 60
-        mins = movie.runtime % 60
-        converted_runtime = f"{hours}H{mins}M"
-        embed.add_field(name="Budget", value=f"${movie.budget:,.2f}")
-        embed.add_field(name="Revenue", value=f"${movie.revenue:,.2f}")
-        embed.add_field(name="Runtime", value=f"{converted_runtime}")
-        embed.add_field(name="Genres", value=f"{genres}")
-        if movie.overview:
-            embed.add_field(name="Overview", value=f"{movie.overview}", inline=False)
-        embed.set_image(
-            url=f"https://image.tmdb.org/t/p/original/{movie.backdrop_path}"
-        )
-        await interaction.followup.send(embed=embed)
+        await interaction.followup.send(embed=embed, view=view)
 
     @app_commands.command(name="anime", description="Shows information about a anime")
     @app_commands.describe(query="Anime you want to search")
@@ -141,6 +129,48 @@ class Google(discord.ui.View):
         # Therefore we have to manually create one.
         # We add the quoted url to the button, and add the button to the view.
         self.add_item(discord.ui.Button(label="Click Here", url=url))
+
+
+class MovieButton(discord.ui.Button):
+    def __init__(self, label, results):
+        super().__init__()
+        self.results = results
+        self.label = label
+
+    async def callback(self, interaction: discord.Interaction):
+
+        await interaction.response.defer()
+        first_result = self.results
+        movie = tmdb.Movies(first_result["id"])
+        genres = []
+        for genre in movie.info()["genres"]:
+            genres.append(genre["name"])
+        genres = ", ".join(genres)
+        embed = discord.Embed(
+            title=f"{movie.title}",
+            description=f"{movie.tagline}",
+            url=f"https://www.imdb.com/title/{movie.imdb_id}",
+        )
+        embed.add_field(name="Release Date", value=f"{movie.release_date}")
+        embed.add_field(name="Rating", value=f"{movie.vote_average:.2f}")
+        embed.add_field(name="Original Language", value=f"{movie.original_language}")
+
+        hours = movie.runtime // 60
+        mins = movie.runtime % 60
+        converted_runtime = f"{hours}H{mins}M"
+        embed.add_field(name="Budget", value=f"${movie.budget:,.2f}")
+        embed.add_field(name="Revenue", value=f"${movie.revenue:,.2f}")
+        embed.add_field(name="Runtime", value=f"{converted_runtime}")
+        embed.add_field(name="Genres", value=f"{genres}")
+        if movie.overview:
+            embed.add_field(name="Overview", value=f"{movie.overview}", inline=False)
+        embed.set_image(
+            url=f"https://image.tmdb.org/t/p/original/{movie.backdrop_path}"
+        )
+
+        await interaction.followup.edit_message(
+            message_id=interaction.message.id, embed=embed, view=self.view
+        )
 
 
 async def setup(bot: commands.Bot) -> None:
