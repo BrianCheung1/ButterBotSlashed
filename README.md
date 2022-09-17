@@ -17,9 +17,12 @@ ButterBotSlashed is an open-source discord bot
   -  Moderation
       - Deleting Messages
       - Giving Roles to members
+  -  Movie/Anime lookup
   -  Simple math commands
+  -  Plays song depending on user input
   -  Logging messages to console
   -  Googling
+  -  Mongodb database for member id storage and balance
   -  Gifs
 
 
