@@ -25,8 +25,8 @@ class MyBot(commands.Bot):
         for filename in os.listdir("./cogs"):
             if filename.endswith(".py"):
                 await self.load_extension(f"cogs.{filename[:-3]}")
-        for guild in self.guilds:
-            await self.tree.sync(guild=discord.Object(int(guild.id)))
+        # global sync
+        # await self.tree.sync()
 
     async def on_ready(self):
 

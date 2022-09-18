@@ -97,9 +97,11 @@ class Development(commands.Cog):
 
     @app_commands.command(name="stats", description="show stats of the bot")
     async def stats(self, interaction: discord.Interaction):
+
         guild_count = 0
         user_count = 0
         cog_count = 0
+        slash_command_count = 0
         for guild in self.bot.guilds:
             guild_count += 1
             user_count += guild.member_count
@@ -107,6 +109,9 @@ class Development(commands.Cog):
         for filename in os.listdir("cogs/"):
             if filename.endswith(".py"):
                 cog_count += 1
+
+        for command in self.bot.tree.get_commands(guild=interaction.guild):
+            slash_command_count += 1
 
         embed = discord.Embed(title=f"{self.bot.user.display_name} stats")
         embed.add_field(
@@ -120,7 +125,7 @@ class Development(commands.Cog):
         minutes, seconds = divmod(remainder, 60)
         days, hours = divmod(hours, 24)
         duration_formatted = f"{days}D:{hours}H:{minutes}M"
-        embed.add_field(name="Uptime", value=f"{duration_formatted}", inline=False)
+        embed.add_field(name="Uptime", value=f"{duration_formatted}", inline=True)
 
         embed.add_field(
             name="Discord.py Version", value=f"{discord.__version__}", inline=True
@@ -128,12 +133,15 @@ class Development(commands.Cog):
         embed.add_field(
             name="Python Version", value=f"{platform.python_version()}", inline=True
         )
-        embed.add_field(name="Total Cogs", value=f"{cog_count}", inline=False)
+        embed.add_field(name="Total Cogs", value=f"{cog_count}", inline=True)
+        embed.add_field(
+            name="Total Slash Comamnds", value=f"{slash_command_count}", inline=True
+        )
         embed.set_thumbnail(url=self.bot.user.display_avatar)
         embed.timestamp = datetime.now()
         await interaction.response.send_message(embed=embed)
 
 
 async def setup(bot: commands.Bot) -> None:
-    await bot.add_cog(Development(bot), guilds=MY_GUILDS)
+    await bot.add_cog(Development(bot))
     print("Development is Loaded")
