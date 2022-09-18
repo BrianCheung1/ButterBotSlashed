@@ -99,10 +99,11 @@ class General(commands.Cog):
             converted_time = datetime.fromtimestamp(next_eps).strftime("%D")
             next_eps_air = anime_dict["next_airing_ep"]["timeUntilAiring"]
             converted_time_air = convert(next_eps_air)
+            embed.add_field(name="Next Eps Date", value=f"{converted_time}")
+            embed.add_field(name="Remaining Time", value=f"{converted_time_air}")
             embed.add_field(
-                name="Next Eps", value=f"{converted_time}\n{converted_time_air}"
+                name="Next Eps", value=f'{anime_dict["next_airing_ep"]["episode"]}'
             )
-
         else:
             embed.add_field(name="Next Eps", value="None")
 
@@ -125,6 +126,8 @@ class General(commands.Cog):
             inline=False,
         )
         embed.set_image(url=anime_dict["banner_image"])
+        embed.set_thumbnail(url=anime_dict["cover_image"])
+        embed.set_footer(text="Data from Anilist")
         await interaction.response.send_message(embed=embed)
 
 
@@ -208,7 +211,10 @@ class MovieButton(discord.ui.Button):
         embed.set_image(
             url=f"https://image.tmdb.org/t/p/original/{movie.backdrop_path}"
         )
-
+        embed.set_thumbnail(
+            url=f"https://image.tmdb.org/t/p/original/{movie.poster_path}"
+        )
+        embed.set_footer(text="Data from TMDB")
         await interaction.followup.edit_message(
             message_id=interaction.message.id, embed=embed, view=self.view
         )
