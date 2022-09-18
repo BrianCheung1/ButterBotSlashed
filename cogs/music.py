@@ -13,6 +13,7 @@ load_dotenv()
 list_of_guilds = os.getenv("GUILDS").split(",")
 MY_GUILDS = [discord.Object(id=int(guild)) for guild in list_of_guilds]
 
+
 youtube_dl.utils.bug_reports_message = lambda: ""
 
 ytdl_format_options = {
@@ -44,6 +45,8 @@ class YTDLSource(discord.PCMVolumeTransformer):
 
         self.title = data.get("title")
         self.url = data.get("url")
+        self.webpage_url = data.get("webpage_url")
+        self.duration = data.get("duration")
 
     @classmethod
     async def from_url(cls, url, *, loop=None, stream=False):
@@ -91,7 +94,7 @@ class Music(commands.Cog):
 
         player = await YTDLSource.from_url(query, loop=self.bot.loop, stream=True)
         if interaction.guild.voice_client.is_playing():
-            await interaction.followup.send(f"{player.title} was added to queue")
+            await interaction.followup.send(f"{player.webpage_url} was added to queue")
             self.playlist[interaction.guild.id].append(player)
         else:
             interaction.guild.voice_client.play(
@@ -102,7 +105,7 @@ class Music(commands.Cog):
             )
             self.playlist[interaction.guild.id] = []
             self.current[interaction.guild.id] = player
-            await interaction.followup.send(f"Now playing: {player.title}")
+            await interaction.followup.send(f"Now playing: {player.webpage_url}")
 
     @app_commands.command(name="volume", description="Change volume of bot")
     @app_commands.describe(volume="1-100% volume")
@@ -143,14 +146,22 @@ class Music(commands.Cog):
         embed = discord.Embed(title="Queue")
         if interaction.guild.id in self.playlist:
             if self.current[interaction.guild.id]:
+                minutes = self.current[interaction.guild.id].duration // 60
+                seconds = self.current[interaction.guild.id].duration % 60
+                duration = "%d:%d" % (minutes, seconds)
                 embed.add_field(
                     name="Currently Playing",
-                    value=f"{self.current[interaction.guild.id].title}",
+                    value=f"[{self.current[interaction.guild.id].title}]({self.current[interaction.guild.id].webpage_url}) - Duration: {duration}",
                     inline=False,
                 )
             if self.playlist[interaction.guild.id]:
                 for song in self.playlist[interaction.guild.id]:
-                    songs.append(song.title)
+                    minutes = song.duration // 60
+                    seconds = song.duration % 60
+                    duration = "%d:%d" % (minutes, seconds)
+                    songs.append(
+                        f"[{song.title}]({song.webpage_url}) - Duration: {duration}"
+                    )
                 if songs:
                     embed.add_field(name="Upcoming", value="\n".join(songs))
         if not songs and not self.current:
