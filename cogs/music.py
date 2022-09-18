@@ -7,8 +7,6 @@ from typing import Optional
 import discord
 import os
 import asyncio
-
-
 import youtube_dl
 
 load_dotenv()
@@ -67,6 +65,7 @@ class Music(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
         self.playlist = {}
+        self.current = {}
 
     @app_commands.command(
         name="play", description="Plays a youtube url depending on user query"
@@ -102,6 +101,7 @@ class Music(commands.Cog):
                 ),
             )
             self.playlist[interaction.guild.id] = []
+            self.current[interaction.guild.id] = player
             await interaction.followup.send(f"Now playing: {player.title}")
 
     @app_commands.command(name="volume", description="Change volume of bot")
@@ -116,28 +116,52 @@ class Music(commands.Cog):
         interaction.guild.voice_client.source.volume = volume / 100
         await interaction.response.send_message(f"Changed volume to {volume}%")
 
+    @app_commands.command(name="skip", description="Skips current song")
+    async def skip(self, interaction: discord.Interaction):
+        if interaction.guild.voice_client:
+            if interaction.guild.voice_client.is_playing():
+                await interaction.response.send_message("Song has been skipped")
+                interaction.guild.voice_client.stop()
+            else:
+                await interaction.response.send_message("No songs playing")
+        else:
+            await interaction.response.send_message("Not connected to a voice channel")
+
     @app_commands.command(name="stop", description="disconnect the bot from the server")
     async def stop(self, interaction: discord.Interaction):
         if interaction.guild.voice_client:
-            await interaction.guild.voice_client.stop()
-            await interaction.response.send_message("Music has stopped")
+            self.playlist.clear()
+            self.current.clear()
+            await interaction.guild.voice_client.disconnect()
+            await interaction.response.send_message("Music stopped")
         else:
             await interaction.response.send_message("Not connected to a voice channel")
 
     @app_commands.command(name="queue", description="shows the queue of songs")
     async def queue(self, interaction: discord.Interaction):
         songs = []
+        embed = discord.Embed(title="Queue")
         if interaction.guild.id in self.playlist:
-            for song in self.playlist[interaction.guild.id]:
-                songs.append(song.title)
-        if not songs:
+            if self.current[interaction.guild.id]:
+                embed.add_field(
+                    name="Currently Playing",
+                    value=f"{self.current[interaction.guild.id].title}",
+                    inline=False,
+                )
+            if self.playlist[interaction.guild.id]:
+                for song in self.playlist[interaction.guild.id]:
+                    songs.append(song.title)
+                if songs:
+                    embed.add_field(name="Upcoming", value="\n".join(songs))
+        if not songs and not self.current:
             return await interaction.response.send_message("No Songs in Queue")
-        await interaction.response.send_message(", ".join(songs))
+        await interaction.response.send_message(embed=embed)
 
     async def check_queue(self, interaction):
         if interaction.guild_id in self.playlist:
             if len(self.playlist[interaction.guild_id]) != 0:
                 song = self.playlist[interaction.guild_id].pop(0)
+                self.current[interaction.guild.id] = song
                 interaction.guild.voice_client.play(
                     song,
                     after=lambda x=None: asyncio.run_coroutine_threadsafe(
