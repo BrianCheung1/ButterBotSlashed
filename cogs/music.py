@@ -96,7 +96,10 @@ class Music(commands.Cog):
             self.playlist[interaction.guild.id].append(player)
         else:
             interaction.guild.voice_client.play(
-                player, after=lambda x=None: self.check_queue(interaction)
+                player,
+                after=lambda x=None: asyncio.run_coroutine_threadsafe(
+                    self.check_queue(interaction), self.bot.loop
+                ),
             )
             self.playlist[interaction.guild.id] = []
             await interaction.followup.send(f"Now playing: {player.title}")
@@ -116,7 +119,7 @@ class Music(commands.Cog):
     @app_commands.command(name="stop", description="disconnect the bot from the server")
     async def stop(self, interaction: discord.Interaction):
         if interaction.guild.voice_client:
-            await interaction.guild.voice_client.disconnect()
+            await interaction.guild.voice_client.stop()
             await interaction.response.send_message("Music has stopped")
         else:
             await interaction.response.send_message("Not connected to a voice channel")
@@ -128,17 +131,24 @@ class Music(commands.Cog):
             for song in self.playlist[interaction.guild.id]:
                 songs.append(song.title)
         if not songs:
-            return interaction.response.send_message("No Songs in Queue")
+            return await interaction.response.send_message("No Songs in Queue")
         await interaction.response.send_message(", ".join(songs))
 
-    def check_queue(self, interaction):
+    async def check_queue(self, interaction):
         if interaction.guild_id in self.playlist:
             if len(self.playlist[interaction.guild_id]) != 0:
                 song = self.playlist[interaction.guild_id].pop(0)
                 interaction.guild.voice_client.play(
                     song,
-                    after=lambda x=None: self.check_queue(interaction),
+                    after=lambda x=None: asyncio.run_coroutine_threadsafe(
+                        self.check_queue(interaction), self.bot.loop
+                    ),
                 )
+
+                await interaction.followup.send(f"{song.title} is now playing")
+            else:
+                await interaction.followup.send("All songs have finished")
+                await interaction.guild.voice_client.disconnect()
 
 
 async def setup(bot: commands.Bot) -> None:
