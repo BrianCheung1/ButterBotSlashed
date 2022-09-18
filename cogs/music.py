@@ -66,7 +66,7 @@ class Music(commands.Cog):
 
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
-        self.playlist = []
+        self.playlist = {}
 
     @app_commands.command(
         name="play", description="Plays a youtube url depending on user query"
@@ -92,12 +92,13 @@ class Music(commands.Cog):
 
         player = await YTDLSource.from_url(query, loop=self.bot.loop, stream=True)
         if interaction.guild.voice_client.is_playing():
-            await interaction.followup.send(f"A Song is already playing")
-            self.playlist.append(player.title)
+            await interaction.followup.send(f"{player.title} was added to queue")
+            self.playlist[interaction.guild.id].append(player)
         else:
             interaction.guild.voice_client.play(
-                player,
+                player, after=lambda x=None: self.check_queue(interaction)
             )
+            self.playlist[interaction.guild.id] = []
             await interaction.followup.send(f"Now playing: {player.title}")
 
     @app_commands.command(name="volume", description="Change volume of bot")
@@ -122,7 +123,22 @@ class Music(commands.Cog):
 
     @app_commands.command(name="queue", description="shows the queue of songs")
     async def queue(self, interaction: discord.Interaction):
-        print(self.playlist)
+        songs = []
+        if interaction.guild.id in self.playlist:
+            for song in self.playlist[interaction.guild.id]:
+                songs.append(song.title)
+        if not songs:
+            return interaction.response.send_message("No Songs in Queue")
+        await interaction.response.send_message(", ".join(songs))
+
+    def check_queue(self, interaction):
+        if interaction.guild_id in self.playlist:
+            if len(self.playlist[interaction.guild_id]) != 0:
+                song = self.playlist[interaction.guild_id].pop(0)
+                interaction.guild.voice_client.play(
+                    song,
+                    after=lambda x=None: self.check_queue(interaction),
+                )
 
 
 async def setup(bot: commands.Bot) -> None:
