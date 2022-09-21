@@ -74,6 +74,21 @@ class General(commands.Cog):
         await interaction.followup.send(embed=embed, view=view)
 
     @app_commands.command(
+        name="popular_movies", description="Shows the top 10 popular movies"
+    )
+    async def popular_movies(self, interaction: discord.Interaction):
+        search = tmdb.Movies()
+        embed = discord.Embed(title="Popular Movies")
+        result = ""
+        for index, movie in enumerate(search.popular()["results"][0:10]):
+
+            movie_info = tmdb.Movies(movie["id"])
+            response = movie_info.info()
+            result += f'{index+1}. [{movie["title"]}](https://www.imdb.com/title/{movie_info.imdb_id}) - Rating: {movie["vote_average"]}\n'
+        embed.add_field(name="Movies", value=f"{result}")
+        await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(
         name="tv_show", description="Shows information about a tv show"
     )
     @app_commands.describe(query="TV show you want to search")
