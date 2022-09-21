@@ -57,17 +57,41 @@ class General(commands.Cog):
         if not search.results:
             await interaction.followup.send("No results for your query")
         view = discord.ui.View()
-        for index, result in enumerate(search.results):
-            view.add_item(MovieButton(index + 1, search.results[index]))
-            if index >= 4:
-                break
-        view.add_item(MovieMenuButton(query, search.results))
         embed = discord.Embed()
         results = ""
         for index, result in enumerate(search.results):
+            view.add_item(MovieButton(index + 1, search.results[index]))
             results += f'{index+1}. **{result["title"]}**\n'
             if index >= 4:
                 break
+        view.add_item(MovieMenuButton(query, search.results))
+        embed.add_field(name=f"Results for {query.title()}", value=results)
+        embed.timestamp = datetime.now()
+        embed.set_footer(
+            text=f"{interaction.user.display_name}",
+            icon_url=interaction.user.display_avatar,
+        )
+        await interaction.followup.send(embed=embed, view=view)
+
+    @app_commands.command(
+        name="tv_show", description="Shows information about a tv show"
+    )
+    @app_commands.describe(query="TV show you want to search")
+    async def tv_show(self, interaction: discord.Interaction, query: str):
+        await interaction.response.defer()
+        search = tmdb.Search()
+        response = search.tv(query=query)
+        if not search.results:
+            await interaction.followup.send("No results for your query")
+        view = discord.ui.View()
+        embed = discord.Embed()
+        results = ""
+        for index, result in enumerate(search.results):
+            view.add_item(TVButton(index + 1, search.results[index]))
+            results += f'{index+1}. **{result["original_name"]}**\n'
+            if index >= 4:
+                break
+        view.add_item(TVMenuButton(query, search.results))
         embed.add_field(name=f"Results for {query.title()}", value=results)
         embed.timestamp = datetime.now()
         embed.set_footer(
@@ -135,6 +159,7 @@ class General(commands.Cog):
     @app_commands.command(
         name="time", description="Convert from one time zone to another"
     )
+    @app_commands.describe(timezones="Timezone you want current time to convert to")
     async def time(
         self,
         interaction: discord.Interaction,
@@ -145,11 +170,12 @@ class General(commands.Cog):
         embed = discord.Embed(title="Time Converter")
         embed.add_field(
             name="Local Time",
-            value=f'{datetime.now().strftime("Time: %I:%M:%S:%p")}',
+            value=f'{datetime.now().strftime("%I:%M:%p")}',
+            inline=False,
         )
         embed.add_field(
             name=f"{timezones}",
-            value=f'{datetime.now(timezone(timezones)).strftime("Time: %I:%M:%S:%p")}',
+            value=f'{datetime.now(timezone(timezones)).strftime("%I:%M:%p")}',
         )
         await interaction.response.send_message(embed=embed)
 
@@ -236,6 +262,77 @@ class MovieButton(discord.ui.Button):
         )
         embed.set_thumbnail(
             url=f"https://image.tmdb.org/t/p/original/{movie.poster_path}"
+        )
+        embed.set_footer(text="Data from TMDB")
+        await interaction.followup.edit_message(
+            message_id=interaction.message.id, embed=embed, view=self.view
+        )
+
+
+class TVMenuButton(discord.ui.Button):
+    def __init__(self, query, results):
+        super().__init__()
+        self.results = results
+        self.label = "Menu"
+        self.query = query
+        self.style = discord.ButtonStyle.primary
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        embed = discord.Embed()
+        results = ""
+        for index, result in enumerate(self.results):
+            results += f'{index+1}. **{result["original_name"]}**\n'
+            if index >= 4:
+                break
+        embed.add_field(name=f"Results for {self.query.title()}", value=results)
+        embed.timestamp = datetime.now()
+        embed.set_footer(
+            text=f"{interaction.user.display_name}",
+            icon_url=interaction.user.display_avatar,
+        )
+        await interaction.followup.edit_message(
+            message_id=interaction.message.id, embed=embed, view=self.view
+        )
+
+
+class TVButton(discord.ui.Button):
+    def __init__(self, label, results):
+        super().__init__()
+        self.results = results
+        self.label = label
+        self.style = discord.ButtonStyle.primary
+
+    async def callback(self, interaction: discord.Interaction):
+
+        await interaction.response.defer()
+        first_result = self.results
+        show = tmdb.TV(first_result["id"])
+        genres = []
+        for genre in show.info()["genres"]:
+            genres.append(genre["name"])
+        genres = ", ".join(genres)
+        embed = discord.Embed(
+            title=f"{show.name}",
+            description=f"{show.tagline}",
+            url=f"{show.homepage}",
+        )
+        embed.add_field(name="Release Date", value=f"{show.first_air_date}")
+        embed.add_field(name="Rating", value=f"{show.vote_average:.2f}")
+        embed.add_field(name="Original Language", value=f"{show.original_language}")
+
+        embed.add_field(name="Seasons", value=f"{show.number_of_seasons}")
+        embed.add_field(name="Episodes", value=f"{show.number_of_episodes}")
+        if show.next_episode_to_air:
+            show.next_episode_to_air = f'{show.next_episode_to_air["air_date"]}'
+        embed.add_field(name="Next Eps", value=f"{show.next_episode_to_air}")
+        if genres:
+            embed.add_field(name="Genres", value=f"{genres}")
+        if show.overview:
+            embed.add_field(name="Overview", value=f"{show.overview}", inline=False)
+        embed.set_image(url=f"https://image.tmdb.org/t/p/original/{show.backdrop_path}")
+        embed.set_thumbnail(
+            url=f"https://image.tmdb.org/t/p/original/{show.poster_path}"
         )
         embed.set_footer(text="Data from TMDB")
         await interaction.followup.edit_message(
