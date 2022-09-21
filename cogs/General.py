@@ -3,12 +3,14 @@ from discord import ButtonStyle, app_commands
 from discord.ext import commands
 from discord.ui import Button, View
 from dotenv import load_dotenv
-from typing import Literal, Union, NamedTuple, Optional
+from typing import Literal, Union, NamedTuple, Optional, List
 from urllib.parse import quote_plus
 import discord
 import os
 import tmdbsimple as tmdb
+from pytz import timezone
 from AnilistPython import Anilist
+
 
 anilist = Anilist()
 tmdb.API_KEY = os.getenv("TMDB")
@@ -128,6 +130,27 @@ class General(commands.Cog):
         embed.set_image(url=anime_dict["banner_image"])
         embed.set_thumbnail(url=anime_dict["cover_image"])
         embed.set_footer(text="Data from Anilist")
+        await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(
+        name="time", description="Convert from one time zone to another"
+    )
+    async def time(
+        self,
+        interaction: discord.Interaction,
+        timezones: Literal[
+            "US/Central", "US/Eastern", "US/Mountain", "US/Pacific", "UTC"
+        ],
+    ):
+        embed = discord.Embed(title="Time Converter")
+        embed.add_field(
+            name="Local Time",
+            value=f'{datetime.now().strftime("Time: %I:%M:%S:%p")}',
+        )
+        embed.add_field(
+            name=f"{timezones}",
+            value=f'{datetime.now(timezone(timezones)).strftime("Time: %I:%M:%S:%p")}',
+        )
         await interaction.response.send_message(embed=embed)
 
 

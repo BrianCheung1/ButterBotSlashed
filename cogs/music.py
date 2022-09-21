@@ -148,7 +148,7 @@ class Music(commands.Cog):
             if self.current[interaction.guild.id]:
                 minutes = self.current[interaction.guild.id].duration // 60
                 seconds = self.current[interaction.guild.id].duration % 60
-                duration = "%d:%d" % (minutes, seconds)
+                duration = "%.2d:%.2d" % (minutes, seconds)
                 embed.add_field(
                     name="Currently Playing",
                     value=f"[{self.current[interaction.guild.id].title}]({self.current[interaction.guild.id].webpage_url}) - Duration: {duration}",
@@ -158,7 +158,7 @@ class Music(commands.Cog):
                 for song in self.playlist[interaction.guild.id]:
                     minutes = song.duration // 60
                     seconds = song.duration % 60
-                    duration = "%d:%d" % (minutes, seconds)
+                    duration = "%.2d:%.2d" % (minutes, seconds)
                     songs.append(
                         f"[{song.title}]({song.webpage_url}) - Duration: {duration}"
                     )
