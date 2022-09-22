@@ -77,16 +77,17 @@ class General(commands.Cog):
         name="popular_movies", description="Shows the top 10 popular movies"
     )
     async def popular_movies(self, interaction: discord.Interaction):
+        await interaction.response.defer()
         search = tmdb.Movies()
         embed = discord.Embed(title="Popular Movies")
         result = ""
         for index, movie in enumerate(search.popular()["results"][0:10]):
 
-            movie_info = tmdb.Movies(movie["id"])
-            response = movie_info.info()
-            result += f'{index+1}. [{movie["title"]}](https://www.imdb.com/title/{movie_info.imdb_id}) - Rating: {movie["vote_average"]}\n'
+            # movie_info = tmdb.Movies(movie["id"])
+            # response = movie_info.info()
+            result += f'{index+1}. [{movie["title"]}](https://www.themoviedb.org/movie/{movie["id"]}) - Rating: {movie["vote_average"]}\n'
         embed.add_field(name="Movies", value=f"{result}")
-        await interaction.response.send_message(embed=embed)
+        await interaction.followup.send(embed=embed)
 
     @app_commands.command(
         name="tv_show", description="Shows information about a tv show"
@@ -256,7 +257,7 @@ class MovieButton(discord.ui.Button):
         embed = discord.Embed(
             title=f"{movie.title}",
             description=f"{movie.tagline}",
-            url=f"https://www.imdb.com/title/{movie.imdb_id}",
+            url=f"https://www.themoviedb.org/movie/{movie.id}",
         )
         embed.add_field(name="Release Date", value=f"{movie.release_date}")
         embed.add_field(name="Rating", value=f"{movie.vote_average:.2f}")
@@ -330,7 +331,7 @@ class TVButton(discord.ui.Button):
         embed = discord.Embed(
             title=f"{show.name}",
             description=f"{show.tagline}",
-            url=f"{show.homepage}",
+            url=f"https://www.themoviedb.org/tv/{show.id}",
         )
         embed.add_field(name="Release Date", value=f"{show.first_air_date}")
         embed.add_field(name="Rating", value=f"{show.vote_average:.2f}")

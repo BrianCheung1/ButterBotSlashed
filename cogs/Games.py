@@ -82,9 +82,11 @@ class Games(commands.Cog):
         embed.add_field(
             name="Full Games List", value=f"[Click Here]({GAMES})", inline=False
         )
-        embed.add_field(name="Steam Link", value=f"{steam_link}", inline=False)
+        embed.add_field(
+            name="Steam Link", value=f"[Click Here]({steam_link})", inline=False
+        )
         embed.add_field(name="Description", value=f"{description}", inline=False)
-        embed.add_field(name="Price", value=f"{price}", inline=True)
+        embed.add_field(name="Price", value=f"${price}", inline=True)
         embed.add_field(name="Reviews", value=f"{reviews}", inline=True)
         embed.add_field(name="App Id", value=f"{app_id}", inline=True)
         embed.set_image(url=image)
