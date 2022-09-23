@@ -136,8 +136,9 @@ class General(commands.Cog):
         embed = discord.Embed()
         results = ""
         for index, anime in enumerate(animes):
-            test_anime = await client.search_anime(str(anime.title), limit=1)
-            results += f"{index+1}. **[{anime.canonical_title}](https://kitsu.io/anime/{anime.slug})** - Rating: {anime.average_rating}\n"
+            results += (
+                f"{index+1}. **[{anime.title}](https://kitsu.io/anime/{anime.id})**\n"
+            )
         embed.add_field(name="Trending Animes", value=results)
         await client.close()
         await interaction.followup.send(embed=embed)
@@ -155,11 +156,11 @@ class General(commands.Cog):
             await interaction.followup.send("No results for your query")
         if not isinstance(animes, list):
             view.add_item(AnimeButton(1, animes))
-            results += f"{1}. **[{animes.canonical_title}](https://kitsu.io/anime/{animes.slug})** - Rating: {animes.average_rating}\n"
+            results += f"{1}. **[{animes.canonical_title}](https://kitsu.io/anime/{animes.id})** - Rating: {animes.average_rating}\n"
         else:
             for index, anime in enumerate(animes):
                 view.add_item(AnimeButton(index + 1, animes[index]))
-                results += f"{index+1}. **[{anime.canonical_title}](https://kitsu.io/anime/{anime.slug})** - Rating: {anime.average_rating}\n"
+                results += f"{index+1}. **[{anime.canonical_title}](https://kitsu.io/anime/{anime.id})** - Rating: {anime.average_rating}\n"
 
         view.add_item(AnimeMenuButton(query, animes))
         embed.add_field(name=f"Results for {query.title()}", value=results)
@@ -367,10 +368,10 @@ class AnimeMenuButton(discord.ui.Button):
         embed = discord.Embed()
         results = ""
         if not isinstance(self.results, list):
-            results += f"{1}. **[{self.results.canonical_title}](https://kitsu.io/anime/{self.results.slug})** - Rating: {self.results.average_rating}\n"
+            results += f"{1}. **[{self.results.canonical_title}](https://kitsu.io/anime/{self.results.id})** - Rating: {self.results.average_rating}\n"
         else:
             for index, anime in enumerate(self.results):
-                results += f"{index+1}. **[{anime.canonical_title}](https://kitsu.io/anime/{anime.slug})** - Rating: {anime.average_rating}\n"
+                results += f"{index+1}. **[{anime.canonical_title}](https://kitsu.io/anime/{anime.id})** - Rating: {anime.average_rating}\n"
 
         embed.add_field(name=f"Results for {self.query.title()}", value=results)
         embed.timestamp = datetime.now()
@@ -391,7 +392,6 @@ class AnimeButton(discord.ui.Button):
         self.style = discord.ButtonStyle.primary
 
     async def callback(self, interaction: discord.Interaction):
-        client = kitsu.Client()
         await interaction.response.defer()
         anime = self.results
         embed = discord.Embed(
@@ -399,7 +399,9 @@ class AnimeButton(discord.ui.Button):
             description=f"{anime.title}",
             url=f"https://kitsu.io/anime/{anime.slug}",
         )
-        embed.add_field(name="Release Date", value=f"{anime.start_date.strftime('%D')}")
+        embed.add_field(
+            name="Release Date", value=f"{anime.start_date.strftime('%Y-%m-%d')}"
+        )
         embed.add_field(name="Rating", value=f"{anime.average_rating}")
         embed.add_field(name="Episodes", value=f"{anime.episode_count}")
 
@@ -418,7 +420,6 @@ class AnimeButton(discord.ui.Button):
         await interaction.followup.edit_message(
             message_id=interaction.message.id, embed=embed, view=self.view
         )
-        await client.close()
 
 
 def convert(time):
