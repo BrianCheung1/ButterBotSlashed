@@ -9,10 +9,9 @@ import discord
 import os
 import tmdbsimple as tmdb
 from pytz import timezone
-from AnilistPython import Anilist
+import kitsu
+import asyncio
 
-
-anilist = Anilist()
 tmdb.API_KEY = os.getenv("TMDB")
 
 load_dotenv()
@@ -90,6 +89,19 @@ class General(commands.Cog):
         await interaction.followup.send(embed=embed)
 
     @app_commands.command(
+        name="popular_shows", description="Shows the top 10 popular shows"
+    )
+    async def popular_shows(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        search = tmdb.TV()
+        embed = discord.Embed(title="Popular Movies")
+        result = ""
+        for index, show in enumerate(search.popular()["results"][0:10]):
+            result += f'{index+1}. [{show["name"]}](https://www.themoviedb.org/movie/{show["id"]}) - Rating: {show["vote_average"]}\n'
+        embed.add_field(name="Movies", value=f"{result}")
+        await interaction.followup.send(embed=embed)
+
+    @app_commands.command(
         name="tv_show", description="Shows information about a tv show"
     )
     @app_commands.describe(query="TV show you want to search")
@@ -116,61 +128,47 @@ class General(commands.Cog):
         )
         await interaction.followup.send(embed=embed, view=view)
 
+    @app_commands.command(name="popular_animes", description="Shows popular anime")
+    async def popular_animes(self, interaction: discord.Interaction):
+        client = kitsu.Client()
+        await interaction.response.defer()
+        animes = await client.trending_anime()
+        embed = discord.Embed()
+        results = ""
+        for index, anime in enumerate(animes):
+            test_anime = await client.search_anime(str(anime.title), limit=1)
+            results += f"{index+1}. **[{anime.canonical_title}](https://kitsu.io/anime/{anime.slug})** - Rating: {anime.average_rating}\n"
+        embed.add_field(name="Trending Animes", value=results)
+        await client.close()
+        await interaction.followup.send(embed=embed)
+
     @app_commands.command(name="anime", description="Shows information about a anime")
     @app_commands.describe(query="Anime you want to search")
     async def anime(self, interaction: discord.Interaction, query: str):
-        try:
-            anime_dict = anilist.get_anime(query)
-            anime_id = anilist.get_anime_id(anime_dict["name_romaji"])
-        except IndexError as e:
-            return await interaction.response.send_message(
-                f"{e}, Please try changing your query"
-            )
-        embed = discord.Embed(
-            title=f'{anime_dict["name_romaji"]}',
-            description=anime_dict["name_english"],
-            url=f"https://anilist.co/anime/{anime_id}",
-        )
-        embed.add_field(name="Start Date", value=anime_dict["starting_time"])
-        embed.add_field(name="End Date", value=anime_dict["ending_time"])
-        embed.add_field(name="Season", value=anime_dict["season"])
-        embed.add_field(name="Status", value=anime_dict["airing_status"])
-
-        if anime_dict["next_airing_ep"]:
-            next_eps = anime_dict["next_airing_ep"]["airingAt"]
-            converted_time = datetime.fromtimestamp(next_eps).strftime("%D")
-            next_eps_air = anime_dict["next_airing_ep"]["timeUntilAiring"]
-            converted_time_air = convert(next_eps_air)
-            embed.add_field(name="Next Eps Date", value=f"{converted_time}")
-            embed.add_field(name="Remaining Time", value=f"{converted_time_air}")
-            embed.add_field(
-                name="Next Eps", value=f'{anime_dict["next_airing_ep"]["episode"]}'
-            )
+        client = kitsu.Client()
+        await interaction.response.defer()
+        animes = await client.search_anime(query, limit=5)
+        embed = discord.Embed()
+        results = ""
+        view = discord.ui.View()
+        if not animes:
+            await interaction.followup.send("No results for your query")
+        if not isinstance(animes, list):
+            view.add_item(AnimeButton(1, animes))
+            results += f"{1}. **[{animes.canonical_title}](https://kitsu.io/anime/{animes.slug})** - Rating: {animes.average_rating}\n"
         else:
-            embed.add_field(name="Next Eps", value="None")
+            for index, anime in enumerate(animes):
+                view.add_item(AnimeButton(index + 1, animes[index]))
+                results += f"{index+1}. **[{anime.canonical_title}](https://kitsu.io/anime/{anime.slug})** - Rating: {anime.average_rating}\n"
 
-        embed.add_field(name="Score", value=anime_dict["average_score"])
-        embed.add_field(name="Total Eps", value=anime_dict["airing_episodes"])
-        if anime_dict["genres"]:
-            embed.add_field(
-                name="Genre", value=", ".join(anime_dict["genres"]), inline=False
-            )
-        if len(anime_dict["desc"]) > 1024:
-            anime_dict["desc"] = anime_dict["desc"][0:1000] + "..."
-        if not anime_dict["desc"]:
-            anime_dict["desc"] = "None"
-        embed.add_field(
-            name="Description",
-            value=anime_dict["desc"]
-            .replace("<br>", "")
-            .replace("<i>", "*")
-            .replace("</i>", "*"),
-            inline=False,
+        view.add_item(AnimeMenuButton(query, animes))
+        embed.add_field(name=f"Results for {query.title()}", value=results)
+        embed.timestamp = datetime.now()
+        embed.set_footer(
+            text=f"{interaction.user.display_name}",
+            icon_url=interaction.user.display_avatar,
         )
-        embed.set_image(url=anime_dict["banner_image"])
-        embed.set_thumbnail(url=anime_dict["cover_image"])
-        embed.set_footer(text="Data from Anilist")
-        await interaction.response.send_message(embed=embed)
+        await interaction.followup.send(embed=embed, view=view)
 
     @app_commands.command(
         name="time", description="Convert from one time zone to another"
@@ -354,6 +352,73 @@ class TVButton(discord.ui.Button):
         await interaction.followup.edit_message(
             message_id=interaction.message.id, embed=embed, view=self.view
         )
+
+
+class AnimeMenuButton(discord.ui.Button):
+    def __init__(self, query, results):
+        super().__init__()
+        self.results = results
+        self.label = "Menu"
+        self.query = query
+        self.style = discord.ButtonStyle.primary
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        embed = discord.Embed()
+        results = ""
+        if not isinstance(self.results, list):
+            results += f"{1}. **[{self.results.canonical_title}](https://kitsu.io/anime/{self.results.slug})** - Rating: {self.results.average_rating}\n"
+        else:
+            for index, anime in enumerate(self.results):
+                results += f"{index+1}. **[{anime.canonical_title}](https://kitsu.io/anime/{anime.slug})** - Rating: {anime.average_rating}\n"
+
+        embed.add_field(name=f"Results for {self.query.title()}", value=results)
+        embed.timestamp = datetime.now()
+        embed.set_footer(
+            text=f"{interaction.user.display_name}",
+            icon_url=interaction.user.display_avatar,
+        )
+        await interaction.followup.edit_message(
+            message_id=interaction.message.id, embed=embed, view=self.view
+        )
+
+
+class AnimeButton(discord.ui.Button):
+    def __init__(self, label, results):
+        super().__init__()
+        self.results = results
+        self.label = label
+        self.style = discord.ButtonStyle.primary
+
+    async def callback(self, interaction: discord.Interaction):
+        client = kitsu.Client()
+        await interaction.response.defer()
+        anime = self.results
+        embed = discord.Embed(
+            title=f"{anime.canonical_title}",
+            description=f"{anime.title}",
+            url=f"https://kitsu.io/anime/{anime.slug}",
+        )
+        embed.add_field(name="Release Date", value=f"{anime.start_date.strftime('%D')}")
+        embed.add_field(name="Rating", value=f"{anime.average_rating}")
+        embed.add_field(name="Episodes", value=f"{anime.episode_count}")
+
+        embed.add_field(name="Ranking", value=f"{anime.rating_rank}")
+        embed.add_field(name="Popularity", value=anime.popularity_rank)
+        embed.add_field(name="Status", value=f"{anime.status}")
+
+        genres = ", ".join(c.title for c in await anime.categories)
+        if not genres:
+            genres = "None"
+        embed.add_field(name="Genre", value=genres)
+        embed.add_field(name="Overview", value=f"{anime.synopsis}", inline=False)
+        embed.set_image(url=anime.cover_image())
+        embed.set_thumbnail(url=anime.poster_image())
+        embed.set_footer(text="Data from Kitsu")
+        await interaction.followup.edit_message(
+            message_id=interaction.message.id, embed=embed, view=self.view
+        )
+        await client.close()
 
 
 def convert(time):
