@@ -66,6 +66,11 @@ class Games(commands.Cog):
         url = steam_link
         response = requests.get(url, timeout=100)
         soup = BeautifulSoup(response.text, features="html.parser")
+        genres = ""
+        for genre in soup.find_all(class_="app_tag"):
+            if genre.contents[0].strip() == "+":
+                continue
+            genres += f"`{genre.contents[0].strip()}` "
 
         title = soup.select_one('div[class="apphub_AppName"]').contents[0]
         description = soup.find("meta", property="og:description")["content"]
@@ -84,7 +89,7 @@ class Games(commands.Cog):
             ]
         reviews = soup.find("meta", itemprop="reviewCount")["content"]
         reviews_description = soup.find("span", itemprop="description").contents[0]
-        app_id = steam_link.split("/")[4]
+        app_id = soup.find("meta", property="og:url")["content"].split("/")[4]
         embed = discord.Embed(title=f"{add} - {title}", color=0x336EFF, url=steam_link)
         embed.add_field(
             name="Direct Download Link",
@@ -103,6 +108,7 @@ class Games(commands.Cog):
             name="Reviews", value=f"{reviews_description} ({reviews})", inline=True
         )
         embed.add_field(name="App Id", value=f"{app_id}", inline=True)
+        embed.add_field(name="Genres", value=f"{genres}", inline=False)
         embed.set_image(url=image)
         embed.timestamp = datetime.now()
         embed.set_footer(text=f"{interaction.user}", icon_url=interaction.user.avatar)
