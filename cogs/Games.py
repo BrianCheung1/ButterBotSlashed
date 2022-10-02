@@ -70,8 +70,20 @@ class Games(commands.Cog):
         title = soup.select_one('div[class="apphub_AppName"]').contents[0]
         description = soup.find("meta", property="og:description")["content"]
         image = soup.find("meta", property="og:image")["content"]
-        price = soup.find("meta", itemprop="price")["content"]
+        if soup.select_one('div[class="discount_original_price"]'):
+            original_price = soup.select_one(
+                'div[class="discount_original_price"]'
+            ).contents[0]
+            discounted_price = soup.select_one(
+                'div[class="discount_final_price"]'
+            ).contents[0]
+            price = f"~~{original_price}~~\n{discounted_price}"
+        else:
+            price = soup.select_one('div[class="game_purchase_price price"]').contents[
+                0
+            ]
         reviews = soup.find("meta", itemprop="reviewCount")["content"]
+        reviews_description = soup.find("span", itemprop="description").contents[0]
         app_id = steam_link.split("/")[4]
         embed = discord.Embed(title=f"{add} - {title}", color=0x336EFF, url=steam_link)
         embed.add_field(
@@ -86,8 +98,10 @@ class Games(commands.Cog):
             name="Steam Link", value=f"[Click Here]({steam_link})", inline=False
         )
         embed.add_field(name="Description", value=f"{description}", inline=False)
-        embed.add_field(name="Price", value=f"${price}", inline=True)
-        embed.add_field(name="Reviews", value=f"{reviews}", inline=True)
+        embed.add_field(name="Price", value=f"{price}", inline=True)
+        embed.add_field(
+            name="Reviews", value=f"{reviews_description} ({reviews})", inline=True
+        )
         embed.add_field(name="App Id", value=f"{app_id}", inline=True)
         embed.set_image(url=image)
         embed.timestamp = datetime.now()
