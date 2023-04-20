@@ -97,7 +97,7 @@ class General(commands.Cog):
         embed = discord.Embed(title="Popular Movies")
         result = ""
         for index, show in enumerate(search.popular()["results"][0:10]):
-            result += f'{index+1}. [{show["name"]}](https://www.themoviedb.org/movie/{show["id"]}) - Rating: {show["vote_average"]}\n'
+            result += f'{index+1}. [{show["name"]}](https://www.themoviedb.org/tv/{show["id"]}) - Rating: {show["vote_average"]}\n'
         embed.add_field(name="Movies", value=f"{result}")
         await interaction.followup.send(embed=embed)
 
@@ -271,6 +271,8 @@ class MovieButton(discord.ui.Button):
         if genres:
             embed.add_field(name="Genres", value=f"{genres}")
         if movie.overview:
+            if len(movie.overview) > 1024:
+                movie.overview = movie.overview[0:1021] + "..."
             embed.add_field(name="Overview", value=f"{movie.overview}", inline=False)
         embed.set_image(
             url=f"https://image.tmdb.org/t/p/original/{movie.backdrop_path}"
@@ -344,6 +346,8 @@ class TVButton(discord.ui.Button):
         if genres:
             embed.add_field(name="Genres", value=f"{genres}")
         if show.overview:
+            if len(show.overview) > 1024:
+                show.overview = show.overview[0:1021] + "..."
             embed.add_field(name="Overview", value=f"{show.overview}", inline=False)
         embed.set_image(url=f"https://image.tmdb.org/t/p/original/{show.backdrop_path}")
         embed.set_thumbnail(
@@ -413,6 +417,8 @@ class AnimeButton(discord.ui.Button):
         if not genres:
             genres = "None"
         embed.add_field(name="Genre", value=genres)
+        if len(anime.synopsis) > 1024:
+            anime.synopsis = anime.synopsis[0:1021] + "..."
         embed.add_field(name="Overview", value=f"{anime.synopsis}", inline=False)
         embed.set_image(url=anime.cover_image())
         embed.set_thumbnail(url=anime.poster_image())

@@ -59,6 +59,7 @@ class Games(commands.Cog):
         add: str,
         download_link: str,
         steam_link: str,
+        notes: Optional[str] = None,
     ):
         """Easy embed for games download"""
 
@@ -67,7 +68,9 @@ class Games(commands.Cog):
         response = requests.get(url, timeout=100)
         soup = BeautifulSoup(response.text, features="html.parser")
         genres = ""
-        for genre in soup.find_all(class_="app_tag"):
+        for index, genre in enumerate(soup.find_all(class_="app_tag")):
+            if index >= 5:
+                break
             if genre.contents[0].strip() == "+":
                 continue
             genres += f"`{genre.contents[0].strip()}` "
@@ -103,6 +106,7 @@ class Games(commands.Cog):
             name="Steam Link", value=f"[Click Here]({steam_link})", inline=False
         )
         embed.add_field(name="Description", value=f"{description}", inline=False)
+        embed.add_field(name="Notes", value=f"{notes}", inline=False)
         embed.add_field(name="Price", value=f"{price}", inline=True)
         embed.add_field(
             name="Reviews", value=f"{reviews_description} ({reviews})", inline=True
