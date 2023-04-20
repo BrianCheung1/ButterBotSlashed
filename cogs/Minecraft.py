@@ -20,8 +20,6 @@ class Minecraft(commands.Cog):
 
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
-        self.minecraft_status = "Offline - 😔"
-        self.my_background_task.start()
         self.server = None
 
     @app_commands.command(name="mc", description="Show status of minecraft server")
@@ -67,36 +65,6 @@ class Minecraft(commands.Cog):
             )
             await interaction.response.send_message(embed=embed)
 
-    @tasks.loop(seconds=300)  # task runs every 60 seconds
-    async def my_background_task(self):
-        url = requests.get(
-            f"https://minecraft-api.com/api/ping/{IP}/25565/json", timeout=100
-        )
-        url2 = requests.get(
-            f"https://minecraft-api.com/api/ping/response/{IP}/25565/json", timeout=100
-        )
-        if not url.text.__contains__("players"):
-            self.minecraft_status = "Offline - 😔"
-        else:
-            text = json.loads(url.text)
-            players_online = text["players"]["online"]
-            ping = json.loads(url2.text)["response"]
-            if players_online != 1:
-                self.minecraft_status = (
-                    f"Minecraft Server - {players_online} players online {ping}ms"
-                )
-            self.minecraft_status = (
-                f"Minecraft Server - {players_online} player online - {ping}ms"
-            )
-        await self.bot.change_presence(
-            activity=discord.Activity(
-                type=discord.ActivityType.watching, name=self.minecraft_status
-            )
-        )
-
-    @my_background_task.before_loop
-    async def before_my_task(self):
-        await self.bot.wait_until_ready()  # wait until the bot logs in
 
     @app_commands.command(name="start", description="Starts the minecraft server")
     async def start(self, interaction: discord.Interaction):

@@ -1,11 +1,13 @@
 from datetime import datetime
 from discord import app_commands
-from discord.ext import commands
+from discord.ext import commands, tasks
 from dotenv import load_dotenv
 from typing import Literal, Optional
 import discord
 import os
 import platform
+import random
+
 
 load_dotenv()
 list_of_guilds = os.getenv("GUILDS").split(",")
@@ -17,6 +19,7 @@ class Development(commands.Cog):
 
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
+        self.my_background_task.start()
 
     @app_commands.command(name="reload", description="Reload cogs")
     @app_commands.checks.has_permissions(moderate_members=True)
@@ -140,6 +143,19 @@ class Development(commands.Cog):
         embed.set_thumbnail(url=self.bot.user.display_avatar)
         embed.timestamp = datetime.now()
         await interaction.response.send_message(embed=embed)
+
+    @tasks.loop(seconds=60)
+    async def my_background_task(self):
+        randomStatus = ["Valorant", "Apex Legends", "League Of Legends"]
+        await self.bot.change_presence(
+            activity=discord.Activity(
+                type=discord.ActivityType.competing, name=random.choice(randomStatus)
+            )
+        )
+
+    @my_background_task.before_loop
+    async def before_my_task(self):
+        await self.bot.wait_until_ready()
 
 
 async def setup(bot: commands.Bot) -> None:
