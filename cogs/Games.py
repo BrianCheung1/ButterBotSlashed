@@ -59,7 +59,8 @@ class Games(commands.Cog):
         add: str,
         download_link: str,
         steam_link: str,
-        notes: Optional[str] = None,
+        build: Optional[str] = None,
+        notes: Optional[str] = "No Notes",
     ):
         """Easy embed for games download"""
 
@@ -93,7 +94,8 @@ class Games(commands.Cog):
         reviews = soup.find("meta", itemprop="reviewCount")["content"]
         reviews_description = soup.find("span", itemprop="description").contents[0]
         app_id = soup.find("meta", property="og:url")["content"].split("/")[4]
-        embed = discord.Embed(title=f"{add} - {title}", color=0x336EFF, url=steam_link)
+        build_link = f"https://steamdb.info/app/{app_id}/patchnotes/"
+        embed = discord.Embed(title=f"{add} - {title}", color=0x336EFF, url=steam_link, description=f"[Build {build}]({build_link})" if build else "")
         embed.add_field(
             name="Direct Download Link",
             value=f"[Click Here]({download_link})",

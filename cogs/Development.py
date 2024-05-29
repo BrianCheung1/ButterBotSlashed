@@ -90,13 +90,14 @@ class Development(commands.Cog):
                     await self.bot.reload_extension(f"cogs.{filename[:-3]}")
             await self.bot.tree.sync(guild=discord.Object(int(interaction.guild.id)))
             await interaction.followup.send(f"{interaction.guild.name} synced")
-        elif server == "All Server":
+        elif server == "All Servers":
             for filename in os.listdir(f"./cogs"):
                 if filename.endswith(".py"):
                     await self.bot.reload_extension(f"cogs.{filename[:-3]}")
-
-            await self.bot.tree.sync()
-            await interaction.followup.send(f"{len(self.bot.guilds)} servers synced")
+            for guild in MY_GUILDS:
+                synced = await self.bot.tree.sync(guild=guild)
+            # await interaction.followup.send(f"{len(self.bot.guilds)} servers synced")
+            await interaction.followup.send(f"Synced {len(synced)} commands globally")
 
     @app_commands.command(name="stats", description="show stats of the bot")
     async def stats(self, interaction: discord.Interaction):
@@ -144,14 +145,24 @@ class Development(commands.Cog):
         embed.timestamp = datetime.now()
         await interaction.response.send_message(embed=embed)
 
-    @tasks.loop(seconds=60)
+    @tasks.loop(minutes=5)  # Update status every 5 minutes
     async def my_background_task(self):
         randomStatus = ["Valorant", "Apex Legends", "League Of Legends"]
-        await self.bot.change_presence(
-            activity=discord.Activity(
-                type=discord.ActivityType.competing, name=random.choice(randomStatus)
+        try:
+            await self.bot.change_presence(
+                activity=discord.Activity(
+                    type=discord.ActivityType.competing, name=random.choice(randomStatus)
+                )
             )
-        )
+        except discord.HTTPException as e:
+            if e.status == 429:  # Rate limit status code
+                retry_after = int(e.response.headers.get('Retry-After', 5))
+                await asyncio.sleep(retry_after)
+                await self.bot.change_presence(
+                    activity=discord.Activity(
+                        type=discord.ActivityType.competing, name=random.choice(randomStatus)
+                    )
+                )
 
     @my_background_task.before_loop
     async def before_my_task(self):
