@@ -11,6 +11,7 @@ import asyncio
 import requests
 from discord.app_commands import Choice
 import uuid
+from bs4 import BeautifulSoup
 
 load_dotenv()
 list_of_guilds = os.getenv("GUILDS").split(",")
@@ -589,6 +590,7 @@ class Valorant(commands.Cog):
     @app_commands.command(name="valorantqueue")
     @app_commands.describe(
         size="Number of players before queue is full",
+        queue_id="Creates a queue with ID of choice or provide an existing ID to resend that queue to the channel"
     )
     async def valorant_queue(self, interaction: discord.Interaction, size: Optional[int] = 5, queue_id: Optional[str] = None):
         
@@ -626,6 +628,49 @@ class Valorant(commands.Cog):
         self.queue_manager.set_message_id(queue_id, new_message.id)
         
         
+    @app_commands.command(name="valorantpatch")
+    async def valorant_patch(self, interaction: discord.Interaction):
+        """Return Patch Note URl that user chooses"""
+        patch_notes_url = 'https://playvalorant.com/page-data/en-US/news/tags/patch-notes/page-data.json'
+        response = requests.get(patch_notes_url)
+        if response.status_code == 200:
+            data = response.json()
+            # Process the data to create select options
+            # Store matches data
+            patches = data['result']['data']['articles']['nodes'][:25]
+            patch_details = {patch['id']: patch for patch in patches}
+            # Process the data to create select options
+            options = []
+            for patch in patches:
+                patch_title = patch.get('title', 'Unknown Patch')
+                label = f"{patch_title}"
+                options.append(discord.SelectOption(label=label, value=patch['id']))
+                
+            # Create the select menu
+            select = discord.ui.Select(placeholder="Choose a patch", options=options)
+
+            # Define a callback for the select menu
+            async def callback(interaction: discord.Interaction):
+                selected_patch_id = select.values[0]
+                patch = patch_details.get(selected_patch_id)
+
+                if patch:
+                # Extract player stats
+                    patch_url = "https://playvalorant.com/en-us" + patch.get('url', {}).get('url', "unknown")
+                    
+                    await interaction.response.edit_message(content=patch_url)
+                else:
+                    await interaction.response.send_message("Patch details not found.")
+
+            select.callback = callback
+
+            # Create the view with the select menu
+            view = discord.ui.View()
+            view.add_item(select)
+
+            # Send the select menu to the user
+            await interaction.response.send_message(view=view)
+            
 class QueueButton(discord.ui.View):
     def __init__(self, bot, size, queue_manager, queue_id) -> None:
         super().__init__(timeout=None)
@@ -665,6 +710,8 @@ class QueueButton(discord.ui.View):
             
     @discord.ui.button(label="Leave Queue", style=discord.ButtonStyle.danger, emoji="😢")
     async def leave_queue_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        
+        
         user = interaction.user
         response = "R's?"
         if self.queue_manager.leave_queue(self.queue_id, user):
@@ -709,7 +756,11 @@ class QueueButton(discord.ui.View):
             
     @discord.ui.button(label="Show Queue ID", style=discord.ButtonStyle.danger, emoji="🆔")
     async def show_queue_id(self, interaction: discord.Interaction, button: discord.ui.Button):
-        response = f"The queue ID is: `{self.queue_id}`"
+        if interaction.user.id != interaction.message.interaction.user.id and not interaction.user.guild_permissions.manage_messages:
+            await interaction.response.send_message("You don't have permission to see the ID.", ephemeral=True)
+            return
+
+        response = f"The queue ID is: \n`{self.queue_id}`"
         await interaction.response.send_message(response, ephemeral=True)  # Send the message only to the user who clicked the button
         
 # Queue manager class
