@@ -628,19 +628,22 @@ class Valorant(commands.Cog):
     @app_commands.command(name="valorantpatch")
     async def valorant_patch(self, interaction: discord.Interaction):
         """Return Patch Note URl that user chooses"""
-        patch_notes_url = 'https://playvalorant.com/page-data/en-US/news/tags/patch-notes/page-data.json'
+        patch_notes_url = 'https://content.publishing.riotgames.com/publishing-content/v1.0/public/newsfeed?multigamePromoChannelId=riot_mobile_news_feeds&multigameContentGroupId=valorant&categories=announcements&categories=community&categories=media&categories=lore&categories=riot_games&categories=merch&categories=dev&categories=game-updates'
         # Fetch patch notes data
         response = requests.get(patch_notes_url)
-        print(response)
         if response.status_code == 200:
             data = response.json()
-            patches = data.get('result', {}).get('data', {}).get('articles', {}).get('nodes', [])[:25]
+            patches = [
+                item for item in data.get('data', {}).get('items', [])
+                if "patch notes" in item["headline"].lower() or "patch notes" in item["description"].lower()
+            ]
+            # patches = data.get('data', {}).get('items', [])[:25]
             
             # Process patch notes data
             patch_details = {patch['id']: patch for patch in patches}
             options = []
             for patch in patches:
-                patch_title = patch.get('title', 'Unknown Patch')
+                patch_title = patch.get('headline', 'Unknown Patch')
                 label = f"{patch_title}"
                 options.append(discord.SelectOption(label=label, value=patch['id']))
 
@@ -652,7 +655,7 @@ class Valorant(commands.Cog):
                 selected_patch_id = select.values[0]
                 patch = patch_details.get(selected_patch_id)
                 if patch:
-                    patch_url = "https://playvalorant.com/en-us" + patch.get('url', {}).get('url', "unknown")
+                    patch_url = patch.get('action', {}).get('url', "unknown")
                     await interaction.response.edit_message(content=patch_url)
                 else:
                     await interaction.response.send_message("Patch details not found.")
