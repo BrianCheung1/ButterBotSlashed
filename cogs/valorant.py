@@ -12,6 +12,7 @@ import requests
 from discord.app_commands import Choice
 import uuid
 from bs4 import BeautifulSoup
+from urllib.parse import urljoin
 
 load_dotenv()
 list_of_guilds = os.getenv("GUILDS").split(",")
@@ -232,7 +233,7 @@ class Valorant(commands.Cog):
             wins = 0
             loses = 0
             current_rank = current_mmr_data.get("currenttierpatched", "Unknown")
-            current_rr = current_mmr_data.get("elo", 0) % 100
+            current_rr = current_mmr_data.get("elo", 0)
             current_rank_picture = current_mmr_data.get("images", {}).get("small", "unknown Url")
             cutoff_date = datetime.utcnow() - timedelta(hours=time)
             starting_rank = "Unknown"
@@ -244,7 +245,7 @@ class Valorant(commands.Cog):
                 # Check if game date is less than current date and break the loop if it is
                 if game_date < cutoff_date:
                     starting_rank = game_data.get("currenttierpatched", "Unknown")
-                    starting_rr = game_data.get("elo", 0) % 100
+                    starting_rr = game_data.get("elo", 0)
                     print("Breaking loop, game date is less than current date")
                     break
                 game_mmr_change = game_data.get("mmr_change_to_last_game", 0)
@@ -252,17 +253,18 @@ class Valorant(commands.Cog):
                     wins += 1
                 else:
                     loses += 1
-                mmr += game_mmr_change
+            mmr = current_rr - starting_rr
+            
             embed = discord.Embed(
                 title=f"{name}'s MMR history", description=f"MMR change in the last {time} hours")
             embed.add_field(name="Games Won", value=wins, inline=True)
             embed.add_field(name="Games Lost", value=loses, inline=True)
             embed.add_field(name="\u200B", value="\u200B")
             embed.add_field(name="Starting Rank", value=starting_rank, inline=True)
-            embed.add_field(name="Starting RR", value=f"{starting_rr}/100", inline=True)
+            embed.add_field(name="Starting RR", value=f"{starting_rr%100}/100", inline=True)
             embed.add_field(name="\u200B", value="\u200B")
             embed.add_field(name="Current Rank", value=current_rank, inline=True)
-            embed.add_field(name="Current RR", value=f"{current_rr}/100", inline=True)
+            embed.add_field(name="Current RR", value=f"{current_rr%100}/100", inline=True)
             embed.add_field(name="\u200B", value="\u200B")
             mmr_display = f"+{mmr}" if mmr > 0 else f"{mmr}"
             embed.add_field(name="RR Change", value=mmr_display, inline=False)
@@ -293,12 +295,7 @@ class Valorant(commands.Cog):
         response2 = requests.get(api_url2)
         response3 = requests.get(api_url3)
         response4 = requests.get(api_url4)
-        print(response)
-        print(response2)
-        print(response3)
-        print(response4)
-        
-        
+ 
         if response.status_code == 200 and response2.status_code == 200 and response3.status_code == 200 and response4.status_code == 200:
             match_history = response.json()
             mmr = response2.json()
@@ -349,12 +346,12 @@ class Valorant(commands.Cog):
             elo = mmr['data']['elo']
             # Use a default value of 0 if elo is None
             elo_rr = elo % 100 if elo is not None else 0
-            embed.set_author(name=f"{mmr['data']['currenttierpatched']} - {elo_rr%100}RR", icon_url=account["data"]["card"]["small"], url=account["data"]["card"]["large"])
+            embed.set_author(name=f"Current Rank: {mmr['data']['currenttierpatched']} - {elo_rr%100}RR", icon_url=account["data"]["card"]["small"], url=account["data"]["card"]["large"])
             embed.add_field(name="Highest Rank Ever", value=f'{mmr_history["data"]["highest_rank"]["patched_tier"]} - {mmr_history["data"]["highest_rank"]["season"]}', inline=True)
             # Access the current act data
             data = mmr_history.get("data", {})
             by_season = data.get("by_season", {})
-            current_act_data = by_season.get("current_act", {})
+            current_act_data = by_season.get(current_act, {})
             act_rank_wins = current_act_data.get("act_rank_wins", [])
             if act_rank_wins:
                 highest_act_rank = act_rank_wins[0].get("patched_tier", "N/A")
@@ -364,7 +361,7 @@ class Valorant(commands.Cog):
         
             embed.add_field(name="Games Won", value=wins, inline=True)
             embed.add_field(name="Games Lost", value=loses, inline=True)
-            embed.add_field(name="Win Rate", value=round(wins/total_games, 2), inline=True)
+            embed.add_field(name="Win Rate", value=f"{round(wins/total_games, 2)*100}%", inline=True)
             
             embed.add_field(name="Average Kills", value=round(kills/total_games), inline=True)
             embed.add_field(name="Average Deaths", value=round(deaths/total_games), inline=True)
@@ -421,7 +418,7 @@ class Valorant(commands.Cog):
             # Determine user's team
             team = ""
             for player in all_players:
-                if player["name"].lower() == name:
+                if player["name"].lower() == name.lower():
                     team = player['team'].lower()
                     break
 
@@ -632,44 +629,43 @@ class Valorant(commands.Cog):
     async def valorant_patch(self, interaction: discord.Interaction):
         """Return Patch Note URl that user chooses"""
         patch_notes_url = 'https://playvalorant.com/page-data/en-US/news/tags/patch-notes/page-data.json'
+        # Fetch patch notes data
         response = requests.get(patch_notes_url)
+        print(response)
         if response.status_code == 200:
             data = response.json()
-            # Process the data to create select options
-            # Store matches data
-            patches = data['result']['data']['articles']['nodes'][:25]
+            patches = data.get('result', {}).get('data', {}).get('articles', {}).get('nodes', [])[:25]
+            
+            # Process patch notes data
             patch_details = {patch['id']: patch for patch in patches}
-            # Process the data to create select options
             options = []
             for patch in patches:
                 patch_title = patch.get('title', 'Unknown Patch')
                 label = f"{patch_title}"
                 options.append(discord.SelectOption(label=label, value=patch['id']))
-                
-            # Create the select menu
+
+            # Create select menu
             select = discord.ui.Select(placeholder="Choose a patch", options=options)
 
-            # Define a callback for the select menu
+            # Define callback for select menu
             async def callback(interaction: discord.Interaction):
                 selected_patch_id = select.values[0]
                 patch = patch_details.get(selected_patch_id)
-
                 if patch:
-                # Extract player stats
                     patch_url = "https://playvalorant.com/en-us" + patch.get('url', {}).get('url', "unknown")
-                    
                     await interaction.response.edit_message(content=patch_url)
                 else:
                     await interaction.response.send_message("Patch details not found.")
 
             select.callback = callback
 
-            # Create the view with the select menu
+            # Create view with select menu
             view = discord.ui.View()
             view.add_item(select)
-
             # Send the select menu to the user
             await interaction.response.send_message(view=view)
+        else:
+            await interaction.response.send_message("Unable to find patch note details")
             
 class QueueButton(discord.ui.View):
     def __init__(self, bot, size, queue_manager, queue_id) -> None:
@@ -683,6 +679,16 @@ class QueueButton(discord.ui.View):
     async def button_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
         response = "R's?"
         user = interaction.user
+        current_queue = self.queue_manager.get_queue(self.queue_id)
+        current_queue_length = len(current_queue)
+        if current_queue_length >= self.size:
+            queue_members = "\n".join(user.mention for user in current_queue)
+            response += f"\n\nCurrent Queue:\n{queue_members}"
+            button.disabled = True
+            button.label = "Queue Full"
+            await interaction.response.edit_message(content=response, view=self)
+            return
+        
         if self.queue_manager.join_queue(self.queue_id, user):
             response += f"\n{user.mention} has joined the queue!"
         else:

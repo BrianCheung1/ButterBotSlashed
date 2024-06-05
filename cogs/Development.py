@@ -72,7 +72,7 @@ class Development(commands.Cog):
         )
 
     @app_commands.command(name="sync", description="Syncs commands to all servers")
-    @app_commands.checks.has_permissions(moderate_members=True)
+    # @app_commands.checks.has_permissions(moderate_members=True)
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     async def sync(
         self,
@@ -97,7 +97,7 @@ class Development(commands.Cog):
             for guild in MY_GUILDS:
                 synced = await self.bot.tree.sync(guild=guild)
             # await interaction.followup.send(f"{len(self.bot.guilds)} servers synced")
-            await interaction.followup.send(f"Synced {len(synced)} commands globally")
+            await interaction.followup.send(f"Synced {len(synced)} commands globally to {len(MY_GUILDS)} guilds")
 
     @app_commands.command(name="stats", description="show stats of the bot")
     async def stats(self, interaction: discord.Interaction):
