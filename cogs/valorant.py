@@ -232,6 +232,9 @@ class Valorant(commands.Cog):
             mmr = 0
             wins = 0
             loses = 0
+            if current_mmr_data.get("name") is None and current_mmr_data.get("tag") is None:
+                await interaction.followup.send("Failed to fetch MMR history. Incorrect Name or Tag.")
+                return
             current_rank = current_mmr_data.get("currenttierpatched", "Unknown")
             current_rr = current_mmr_data.get("elo", 0)
             current_rank_picture = current_mmr_data.get("images", {}).get("small", "unknown Url")
@@ -253,7 +256,10 @@ class Valorant(commands.Cog):
                     wins += 1
                 else:
                     loses += 1
-            mmr = current_rr - starting_rr
+            if starting_rank == "Unknown":
+                mmr = 0
+            else:
+                mmr = current_rr - starting_rr
             
             embed = discord.Embed(
                 title=f"{name}'s MMR history", description=f"MMR change in the last {time} hours")
@@ -399,7 +405,7 @@ class Valorant(commands.Cog):
         
         if response.status_code == 200:
             def get_players_with_stats(team_players):
-                return [(player["name"], player["stats"]["score"], player["stats"]["kills"], player["stats"]["deaths"], player["stats"]["assists"], player["currenttier_patched"], player["character"]) for player in team_players]
+                return [(player["name"], player["tag"], player["stats"]["score"], player["stats"]["kills"], player["stats"]["deaths"], player["stats"]["assists"], player["currenttier_patched"], player["character"]) for player in team_players]
             def get_map_splash_url(maps_data, map_name):
                 for map_data in maps_data["data"]:
                     if map_data.get("displayName") == map_name:
@@ -408,6 +414,15 @@ class Valorant(commands.Cog):
 
             data = response.json()
             maps = response2.json()
+            
+               # Skip the elements at the beginning if 'is_available' is False
+            while data["data"] and "is_available" in data["data"][0] and not data["data"][0]["is_available"]:
+                data["data"] = data["data"][1:]
+
+            # Check if we have reached the end of the data
+            if not data["data"]:
+                await interaction.followup.send("User does not exist or API Error Please try again")
+                return
             # Extract player data
             red_players = data["data"][0]["players"]["red"]
             blue_players = data["data"][0]["players"]["blue"]
@@ -433,8 +448,8 @@ class Valorant(commands.Cog):
             game_server = data["data"][0]["metadata"]["cluster"]
 
             # Sort players by ACS
-            red_players_with_stats_sorted = sorted(get_players_with_stats(red_players), key=lambda x: x[1] / total_rounds, reverse=True)
-            blue_players_with_stats_sorted = sorted(get_players_with_stats(blue_players), key=lambda x: x[1] / total_rounds, reverse=True)
+            red_players_with_stats_sorted = sorted(get_players_with_stats(red_players), key=lambda x: x[2] / total_rounds, reverse=True)
+            blue_players_with_stats_sorted = sorted(get_players_with_stats(blue_players), key=lambda x: x[2] / total_rounds, reverse=True)
             
             # Create embeds
             embed1_title = f"{name}'s team stats" if team == "red" else "Enemy team stats"
@@ -443,14 +458,14 @@ class Valorant(commands.Cog):
             embed2_description = f"Rounds {rounds_won}-{rounds_lost}" if team == "blue" else f"Rounds {rounds_lost}-{rounds_won}"
             
             embed1 = discord.Embed(title=embed1_title, description = embed1_description)
-            for player_name, score, kills, deaths, assists, rank, agent in red_players_with_stats_sorted:
-                embed1.add_field(name="Player", value=f"{player_name} - {rank} - {agent}", inline=True)
+            for player_name, tag, score, kills, deaths, assists, rank, agent in red_players_with_stats_sorted:
+                embed1.add_field(name="Player", value=f"{player_name}#{tag} - {rank} - {agent}", inline=True)
                 embed1.add_field(name="ACS", value=round(score / total_rounds), inline=True)
                 embed1.add_field(name="KDA", value=f"{kills}/{deaths}/{assists}", inline=True)
 
             embed2 = discord.Embed(title=embed2_title, description = embed2_description)
-            for player_name, score, kills, deaths, assists, rank, agent in blue_players_with_stats_sorted:
-                embed2.add_field(name="Player", value=f"{player_name} - {rank} - {agent}", inline=True)
+            for player_name, tag, score, kills, deaths, assists, rank, agent in blue_players_with_stats_sorted:
+                embed2.add_field(name="Player", value=f"{player_name}#{tag} - {rank} - {agent}", inline=True)
                 embed2.add_field(name="ACS", value=round(score / total_rounds), inline=True)
                 embed2.add_field(name="KDA", value=f"{kills}/{deaths}/{assists}", inline=True)
 
@@ -587,9 +602,11 @@ class Valorant(commands.Cog):
     @app_commands.command(name="valorantqueue")
     @app_commands.describe(
         size="Number of players before queue is full",
-        queue_id="Creates a queue with ID of choice or provide an existing ID to resend that queue to the channel"
+        queue_id="Creates a queue with ID of choice or provide an existing ID to resend that queue to the channel",
+        members = "Members that are already in queue",
+        # role = "Role to ping"
     )
-    async def valorant_queue(self, interaction: discord.Interaction, size: Optional[int] = 5, queue_id: Optional[str] = None):
+    async def valorant_queue(self, interaction: discord.Interaction, size: Optional[int] = 5, queue_id: Optional[str] = None, members: Optional[str] = None):
         
         """Create a queue for valorant team of any size"""
         response = ""
@@ -619,8 +636,26 @@ class Valorant(commands.Cog):
             unique_id = str(uuid.uuid4())
             queue_id = f"valorant_{interaction.channel_id}_{unique_id}"
             
+            if members:
+                # Split mentions and fetch members
+                mentions = members.split()
+                member_objects = []
+                for mention in mentions:
+                    member_id = int(mention.strip('<@!>'))
+                    member = interaction.guild.get_member(member_id)
+                    if member:
+                        member_objects.append(member)
+                        self.queue_manager.join_queue(queue_id, member)
+                
+                queue_members = "\n".join(user.mention for user in member_objects)
+                response = f"\n\nCurrent Queue:\n{queue_members}"
+        # Role Mention
+        role_id = 1250116396935807130  # Replace with your role ID
+        role = discord.utils.get(interaction.guild.roles, id=role_id)
+        role_mention = role.mention if role else ""
         # Send the new message and store its ID
-        await interaction.response.send_message(f"R's? <@179124824109481984> will join{response}", view=QueueButton(self.bot, size, self.queue_manager, queue_id))
+        await interaction.response.send_message(f"R's? {role_mention}{response}", view=QueueButton(self.bot, size, self.queue_manager, queue_id, interaction.user.id))
+        # await interaction.response.send_message(f"R's? {response}", view=QueueButton(self.bot, size, self.queue_manager, queue_id))
         new_message = await interaction.original_response()
         self.queue_manager.set_message_id(queue_id, new_message.id)
         
@@ -671,16 +706,22 @@ class Valorant(commands.Cog):
             await interaction.response.send_message("Unable to find patch note details")
             
 class QueueButton(discord.ui.View):
-    def __init__(self, bot, size, queue_manager, queue_id) -> None:
+    def __init__(self, bot, size, queue_manager, queue_id, original_user_id) -> None:
         super().__init__(timeout=None)
         self.bot = bot
         self.size = size
         self.queue_manager = queue_manager
         self.queue_id = queue_id
+        self.original_user_id = original_user_id
         
     @discord.ui.button(label="Join Queue", style=discord.ButtonStyle.primary, emoji="😎")
     async def button_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
-        response = "R's?"
+        # Role Mention
+        role_id = 1250116396935807130  # Replace with your role ID
+        role = discord.utils.get(interaction.guild.roles, id=role_id)
+        role_mention = role.mention if role else ""
+        
+        response = f"R's? {role_mention}"
         user = interaction.user
         current_queue = self.queue_manager.get_queue(self.queue_id)
         current_queue_length = len(current_queue)
@@ -710,19 +751,26 @@ class QueueButton(discord.ui.View):
             button.disabled = True
             button.label = "Queue Full"
             for user in current_queue:
-                user_dm = await self.bot.fetch_user(user.id)
-                queue_members = "\n".join(user.mention for user in current_queue)
-                await user_dm.send(f"{self.size} R's are ready\nCurrent Queue:\n{queue_members}")
+                try:
+                    user_dm = await self.bot.fetch_user(user.id)
+                    queue_members = "\n".join(user.mention for user in current_queue)
+                    await user_dm.send(f"{self.size} R's are ready\nCurrent Queue:\n{queue_members}")
+                except:
+                    response += f"\n{user.mention} could not be Dmed"
             await interaction.response.edit_message(content=response, view=self)
         else:
             await interaction.response.edit_message(content=response)
             
     @discord.ui.button(label="Leave Queue", style=discord.ButtonStyle.danger, emoji="😢")
     async def leave_queue_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # Role Mention
+        role_id = 1250116396935807130  # Replace with your role ID
+        role = discord.utils.get(interaction.guild.roles, id=role_id)
+        role_mention = role.mention if role else ""
         
+        response = f"R's? {role_mention}"
         
         user = interaction.user
-        response = "R's?"
         if self.queue_manager.leave_queue(self.queue_id, user):
             response += f"\n{user.mention} has left the queue!"
         else:
@@ -748,7 +796,7 @@ class QueueButton(discord.ui.View):
     @discord.ui.button(label="Delete Queue", style=discord.ButtonStyle.danger, emoji="❎")
     async def delete_queue_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         
-        if interaction.user.id != interaction.message.interaction.user.id and not interaction.user.guild_permissions.manage_messages:
+        if interaction.user.id != self.original_user_id and not interaction.user.guild_permissions.manage_messages:
             await interaction.response.send_message("You don't have permission to delete this queue.", ephemeral=True)
             return
             
@@ -763,14 +811,42 @@ class QueueButton(discord.ui.View):
             except discord.NotFound:
                 pass
             
-    @discord.ui.button(label="Show Queue ID", style=discord.ButtonStyle.danger, emoji="🆔")
-    async def show_queue_id(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != interaction.message.interaction.user.id and not interaction.user.guild_permissions.manage_messages:
-            await interaction.response.send_message("You don't have permission to see the ID.", ephemeral=True)
-            return
+    # @discord.ui.button(label="Show Queue ID", style=discord.ButtonStyle.danger, emoji="🆔")
+    # async def show_queue_id(self, interaction: discord.Interaction, button: discord.ui.Button):
+    #     if interaction.user.id != interaction.message.interaction.user.id and not interaction.user.guild_permissions.manage_messages:
+    #         await interaction.response.send_message("You don't have permission to see the ID.", ephemeral=True)
+    #         return
 
-        response = f"The queue ID is: \n`{self.queue_id}`"
-        await interaction.response.send_message(response, ephemeral=True)  # Send the message only to the user who clicked the button
+    #     response = f"The queue ID is: \n`{self.queue_id}`"
+    #     await interaction.response.send_message(response, ephemeral=True)  # Send the message only to the user who clicked the button
+        
+    @discord.ui.button(label="Resend Queue", style=discord.ButtonStyle.danger, emoji="🔄")
+    async def resend_queue(self, interaction: discord.Interaction, button: discord.ui.Button):
+        current_queue = self.queue_manager.get_queue(self.queue_id)
+        queue_members = "\n".join(user.mention for user in current_queue)
+        if current_queue:
+            response = f"\n\nCurrent Queue:\n{queue_members}"
+        else:
+            response = f"\n\nThe queue is currently empty."
+        if current_queue is None:
+            await interaction.response.send_message("This queue ID does not exist", ephemeral=True)
+            return
+        # Delete the previous response
+        previous_message_id = self.queue_manager.get_message_id(self.queue_id)
+        if previous_message_id:
+            try:
+                previous_message = await interaction.channel.fetch_message(previous_message_id)
+                await previous_message.delete()
+                self.queue_manager.delete_message_id(self.queue_id)
+            except discord.NotFound:
+                pass  # The message was already deleted
+        # Role Mention
+        role_id = 1250116396935807130  # Replace with your role ID
+        role = discord.utils.get(interaction.guild.roles, id=role_id)
+        role_mention = role.mention if role else ""
+        await interaction.response.send_message(f"R's? {role_mention} {response}", view=self)
+        new_message = await interaction.original_response()
+        self.queue_manager.set_message_id(self.queue_id, new_message.id)
         
 # Queue manager class
 class QueueManager:
