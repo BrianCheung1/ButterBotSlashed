@@ -60,7 +60,7 @@ class Development(commands.Cog):
         if message.author.bot:
             return
         print(
-            f'[{str(message.channel).title()}][{datetime.now().strftime("%I:%M:%S:%p")}] {message.author}: {message.content}'
+            f'[{str(message.guild).title()}][{str(message.channel).title()}][{datetime.now().strftime("%I:%M:%S:%p")}] {message.author}: {message.content}'
         )
 
     @app_commands.command(name="ping", description="Shows Bot Latency")
