@@ -21,173 +21,39 @@ VAL_KEY = os.getenv("VAL")
 
 
 class Valorant(commands.Cog):
-    """Valorant stats """
+    """Valorant stats"""
+
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
         self.queue_manager = QueueManager()
 
-    @app_commands.command(name="valorantlast")
+    @app_commands.command(name="valorantgames")
     @app_commands.describe(
         name="Player's username",
         tag="Player's Tag",
         region="Players'Region",
     )
-    async def valorant_last_game(self, interaction: discord.Interaction, name: str, tag: str, region: Optional[str] = "NA"):
-        """Returns the stats of a valorant player's last game"""
-    
-        # Define the URL of the API endpoint
-        account_api = f"https://api.henrikdev.xyz/valorant/v1/account/{name}/{tag}?api_key={VAL_KEY}"
-        # account_matches = f"https://api.henrikdev.xyz/valorant/v1/lifetime/matches/{region}/{name}/{tag}?mode=competitive&?api_key={VAL_KEY}"
-        account_matches = f"https://api.henrikdev.xyz/valorant/v3/matches/{region}/{name}/{tag}?api_key={VAL_KEY}"
-        await interaction.response.defer() 
-        # Make a GET request to the API
-        response = requests.get(account_api)
-        matches = requests.get(account_matches)
+    async def valorant_games(
+        self,
+        interaction: discord.Interaction,
+        name: str,
+        tag: str,
+        region: Optional[str] = "NA",
+    ):
+        """Returns the stats of a valorant games"""
+        await interaction.response.defer()
+        stored_matches = self.get_stored_matches(region, name, tag)
+        current_season = self.get_current_season()
+        if isinstance(stored_matches, str):
+            await interaction.followup.send(f"{stored_matches}")
+            return
 
-        # Check if the request was successful (status code 200)
-        if response.status_code == 200 and matches.status_code == 200:
-            
-            data = response.json()
-            last_match_data = matches.json()
+        select = MatchSelector(self.bot, stored_matches, current_season, name, tag)
+        view = discord.ui.View()
+        view.add_item(select)
 
-            # Find the last competitive match
-            last_comp_match = next((comp for comp in last_match_data["data"] if comp["metadata"]["mode"].lower() == "competitive"), None)
-            last_comp_match = next((match for match in last_match_data.get("data", []) if match.get("metadata", {}).get("mode", "").lower() == "competitive"), None)
-            if not last_comp_match:
-                await interaction.followup.send("Error: No competitive match found, try again. Can happen if other modes were played.")
-                return
+        await interaction.followup.send(view=view)
 
-            account_level = data.get("data", {}).get("account_level", "Unknown")
-            card_data = data.get("data", {}).get("card", {})
-            small_player_card = card_data.get("small", "URL not available")
-            wide_player_card = card_data.get("wide", "URL not available")
-            full_name = f"{name}#{tag}".lower()
-
-            # Find the stats for the specified player in the last competitive match
-            last_match_stats = next((player for player in last_comp_match["players"]["all_players"] if player["name"].lower() == name.lower()), None)
-            
-            if not last_match_stats:
-                await interaction.followup.send("Error: Player stats not found in the last competitive match, try again.")
-                return
-
-            # Extract necessary stats
-            stats = last_match_stats.get("stats", {})
-            last_match_kills = stats.get("kills", 0)
-            last_match_deaths = stats.get("deaths", 0)
-            last_match_assists = stats.get("assists", 0)
-            last_match_map = last_comp_match["metadata"].get("map", "Unknown")
-            last_match_date_str = last_comp_match["metadata"].get("game_start_patched", "")
-
-            try:
-                last_match_date = datetime.strptime(last_match_date_str, "%A, %B %d, %Y %I:%M %p")
-                adjusted_date = last_match_date - timedelta(hours=6)
-                result_date_str = adjusted_date.strftime("%A, %B %d, %Y %I:%M %p")
-                result_date = datetime.strptime(result_date_str, "%A, %B %d, %Y %I:%M %p")
-            except ValueError:
-                await interaction.followup.send("Error: Invalid date format for the last match date.")
-                return
-
-            last_match_agent = last_match_stats.get("character", "Unknown")
-            last_match_combat_score = stats.get("score", 0)
-            last_match_damage = last_match_stats.get("damage_made", 0)
-            last_match_red = last_comp_match["teams"]["red"].get("rounds_won", 0)
-            last_match_blue = last_comp_match["teams"]["blue"].get("rounds_won", 0)
-            last_match_total_rounds = last_match_red + last_match_blue
-            last_match_team = last_match_stats.get("team", "Unknown")
-            last_match_total_shots = stats.get("headshots", 0) + stats.get("bodyshots", 0) + stats.get("legshots", 0)
-            last_match_headshots = stats.get("headshots", 0)
-            last_match_ability_casts = last_match_stats.get("ability_casts", {})
-            last_match_ability_c = last_match_ability_casts.get("c_cast", 0)
-            last_match_ability_q = last_match_ability_casts.get("q_cast", 0)
-            last_match_ability_e = last_match_ability_casts.get("e_cast", 0)
-            last_match_ability_x = last_match_ability_casts.get("x_cast", 0)
-            last_match_server = last_comp_match["metadata"].get("cluster", "Unknown")
-            last_match_game_version = last_comp_match["metadata"].get("game_version", "Unknown")
-            last_match_game_length = last_comp_match["metadata"].get("game_length", 0)
-            # Convert game length to minutes and seconds
-            last_match_minutes, last_match_seconds = divmod(last_match_game_length, 60)
-
-            # Process round data
-            round_data = last_comp_match["rounds"]
-            earliest_kill_time = {}
-            plants = 0
-            defuses = 0
-            first_kill = 0
-            first_death = 0
-
-            for round_number, rounds in enumerate(round_data, start=1):
-                plant_events = rounds.get("plant_events", {})
-                defuse_events = rounds.get("defuse_events", {})
-
-                planted_by = plant_events.get("planted_by", {})
-                defused_by = defuse_events.get("defused_by", {})
-
-                # Check plant events
-                if planted_by and planted_by.get("display_name", "").lower() == full_name:
-                    plants += 1
-
-                # Check defuse events
-                if defused_by and defused_by.get("display_name", "").lower() == full_name:
-                    defuses += 1
-
-                # Check player stats for kill events
-                for player in rounds.get("player_stats", []):
-                    for kill_event in player.get('kill_events', []):
-                        kill_time = kill_event.get('kill_time_in_round')
-                        killer_display_name = kill_event.get('killer_display_name', '').lower()
-                        victim_display_name = kill_event.get('victim_display_name', '').lower()
-
-                        if round_number not in earliest_kill_time or kill_time < earliest_kill_time[round_number]['kill_time']:
-                            earliest_kill_time[round_number] = {
-                                'kill_time': kill_time,
-                                'killer_display_name': killer_display_name,
-                                'victim_display_name': victim_display_name
-                            }
-
-            # Count the first kills and deaths
-            for round_info in earliest_kill_time.values():
-                if round_info['killer_display_name'] == full_name:
-                    first_kill += 1
-                if round_info['victim_display_name'] == full_name:
-                    first_death += 1
-
-            # Create and send the embed
-            embed = discord.Embed(
-                title=f"{name}'s Last Game Stats",
-                description=f"Level {account_level}"
-            )
-            embed.add_field(name="Agent", value=last_match_agent, inline=True)
-            embed.add_field(name="Map", value=last_match_map, inline=True)
-            embed.add_field(name="\u200B", value="\u200B")
-            embed.add_field(name="Kills", value=last_match_kills, inline=True)
-            embed.add_field(name="Deaths", value=last_match_deaths, inline=True)
-            embed.add_field(name="Assists", value=last_match_assists, inline=True)
-            embed.add_field(name="Headshot %", value=round((last_match_headshots / last_match_total_shots) * 100), inline=True)
-            embed.add_field(name="First Kills", value=first_kill, inline=True)
-            embed.add_field(name="First Deaths", value=first_death, inline=True)
-            embed.add_field(name="AVG C Ability Casted", value=round(last_match_ability_c / last_match_total_rounds, 1), inline=True)
-            embed.add_field(name="AVG Q Ability Casted", value=round(last_match_ability_q / last_match_total_rounds, 1), inline=True)
-            embed.add_field(name="AVG E Ability Casted", value=round(last_match_ability_e / last_match_total_rounds, 1), inline=True)
-            embed.add_field(name="AVG X Ability Casted", value=round(last_match_ability_x / last_match_total_rounds, 1), inline=True)
-            embed.add_field(name="Plants", value=plants, inline=True)
-            embed.add_field(name="Defuses", value=defuses, inline=True)
-            embed.add_field(name="ACS", value=round(last_match_combat_score / last_match_total_rounds), inline=True)
-            embed.add_field(name="ADR", value=round(last_match_damage / last_match_total_rounds), inline=True)
-            embed.add_field(name="Score", value=f"{last_match_blue} - {last_match_red}" if last_match_team == "Blue" else f"{last_match_red} - {last_match_blue}", inline=True)
-            embed.add_field(name="Game Length", value=f"{last_match_minutes}:{last_match_seconds:02d}", inline=True)
-            embed.set_footer(text=f"{last_match_server} - {last_match_game_version}")
-            embed.set_image(url=wide_player_card)
-            embed.set_thumbnail(url=small_player_card)
-            embed.timestamp = result_date
-
-            await interaction.followup.send(embed=embed)
-            
-        else:
-            # Handle errors
-            print(f"Failed to retrieve data: {response.status_code}")
-            await interaction.followup.send("User does not exist or API Error Please try again")
-            
-            
     @app_commands.choices(
         time=[
             Choice(name="1 Hour", value=1),
@@ -208,13 +74,15 @@ class Valorant(commands.Cog):
         name="Player's username",
         tag="Player's Tag",
         region="Players'Region",
-        time="How long to look back for MMR history"
+        time="How long to look back for MMR history",
     )
     async def valorant_mmr_history(
-        self, interaction: discord.Interaction, 
-        name: str, tag: str, 
-        time: Optional[int] = 24, 
-        region: Optional[str] = "NA"
+        self,
+        interaction: discord.Interaction,
+        name: str,
+        tag: str,
+        time: Optional[int] = 24,
+        region: Optional[str] = "NA",
     ):
         """Returns the stats of a valorant player's mmr history"""
         await interaction.response.defer()
@@ -224,7 +92,7 @@ class Valorant(commands.Cog):
         response = requests.get(api_url)
         response2 = requests.get(api_url2)
 
-        if response.status_code == 200 and response2.status_code == 200: 
+        if response.status_code == 200 and response2.status_code == 200:
             account_mmr = response.json()
             current_mmr = response2.json()
             mmr_data = account_mmr["data"]
@@ -232,12 +100,19 @@ class Valorant(commands.Cog):
             mmr = 0
             wins = 0
             loses = 0
-            if current_mmr_data.get("name") is None and current_mmr_data.get("tag") is None:
-                await interaction.followup.send("Failed to fetch MMR history. Incorrect Name or Tag.")
+            if (
+                current_mmr_data.get("name") is None
+                and current_mmr_data.get("tag") is None
+            ):
+                await interaction.followup.send(
+                    "Failed to fetch MMR history. Incorrect Name or Tag."
+                )
                 return
             current_rank = current_mmr_data.get("currenttierpatched", "Unknown")
             current_rr = current_mmr_data.get("elo", 0)
-            current_rank_picture = current_mmr_data.get("images", {}).get("small", "unknown Url")
+            current_rank_picture = current_mmr_data.get("images", {}).get(
+                "small", "unknown Url"
+            )
             cutoff_date = datetime.utcnow() - timedelta(hours=time)
             starting_rank = "Unknown"
             starting_rr = 0
@@ -260,265 +135,136 @@ class Valorant(commands.Cog):
                 mmr = 0
             else:
                 mmr = current_rr - starting_rr
-            
+
             embed = discord.Embed(
-                title=f"{name}'s MMR history", description=f"MMR change in the last {time} hours")
+                title=f"{name}'s MMR history",
+                description=f"MMR change in the last {time} hours",
+            )
             embed.add_field(name="Games Won", value=wins, inline=True)
             embed.add_field(name="Games Lost", value=loses, inline=True)
             embed.add_field(name="\u200B", value="\u200B")
             embed.add_field(name="Starting Rank", value=starting_rank, inline=True)
-            embed.add_field(name="Starting RR", value=f"{starting_rr%100}/100", inline=True)
+            embed.add_field(
+                name="Starting RR", value=f"{starting_rr%100}/100", inline=True
+            )
             embed.add_field(name="\u200B", value="\u200B")
             embed.add_field(name="Current Rank", value=current_rank, inline=True)
-            embed.add_field(name="Current RR", value=f"{current_rr%100}/100", inline=True)
+            embed.add_field(
+                name="Current RR", value=f"{current_rr%100}/100", inline=True
+            )
             embed.add_field(name="\u200B", value="\u200B")
             mmr_display = f"+{mmr}" if mmr > 0 else f"{mmr}"
             embed.add_field(name="RR Change", value=mmr_display, inline=False)
             embed.timestamp = datetime.now()
-            embed.set_thumbnail (url = current_rank_picture)
-
+            embed.set_thumbnail(url=current_rank_picture)
 
             await interaction.followup.send(embed=embed)
         else:
             # Handle error if the response was not successful
-            await interaction.followup.send("Failed to fetch MMR history. Please try again later.")
-    
-        
+            await interaction.followup.send(
+                "Failed to fetch MMR history. Please try again later."
+            )
+
     @app_commands.command(name="valorantstats")
     @app_commands.describe(
         name="Player's username",
         tag="Player's Tag",
         region="Players'Region",
     )
-    async def valorant_stats(self, interaction: discord.Interaction, name: str, tag: str, region: Optional[str] = "NA"):
+    async def valorant_stats(
+        self,
+        interaction: discord.Interaction,
+        name: str,
+        tag: str,
+        region: Optional[str] = "NA",
+    ):
         """Returns the stats of a valorant player's"""
         await interaction.response.defer()
-        api_url = f"https://api.henrikdev.xyz/valorant/v1/lifetime/matches/na/{name}/{tag}?mode=competitive&api_key={VAL_KEY}"
-        api_url2 = f"https://api.henrikdev.xyz/valorant/v1/mmr/na/{name}/{tag}?api_key={VAL_KEY}"
-        api_url3 = f"https://api.henrikdev.xyz/valorant/v1/account/{name}/{tag}?api_key={VAL_KEY}"
-        api_url4 = f"https://api.henrikdev.xyz/valorant/v2/mmr/na/{name}/{tag}?api_key={VAL_KEY}"
-        response = requests.get(api_url)
-        response2 = requests.get(api_url2)
-        response3 = requests.get(api_url3)
-        response4 = requests.get(api_url4)
- 
-        if response.status_code == 200 and response2.status_code == 200 and response3.status_code == 200 and response4.status_code == 200:
-            match_history = response.json()
-            mmr = response2.json()
-            account = response3.json()
-            mmr_history = response4.json()
-            kills = 0
-            deaths = 0
-            assists = 0
-            total_shots = 0
-            headshots = 0
-            bodyshots = 0
-            legshots = 0
-            wins = 0
-            loses = 0
-            acs = 0
-            adr = 0
-            current_act = match_history["data"][0]["meta"]["season"]["short"]
-            total_games = 0
-            total_rounds = 0
+        account_details = self.get_account_details(name, tag)
+        stored_matches = self.get_stored_matches(region, name, tag)
+        current_season = self.get_current_season()
+        mmr_history = self.get_mmr_history(region, name, tag)
 
-            for games in match_history["data"]:
-                if games["meta"]["season"]["short"] != current_act:
-                    continue
-                team = games["stats"]["team"]
-                kills += games["stats"]["kills"]
-                deaths += games["stats"]["deaths"]
-                assists += games["stats"]["assists"]
-                total_shots += sum(games["stats"]["shots"].values())
-                headshots += games["stats"]["shots"]["head"]
-                bodyshots += games["stats"]["shots"]["body"]
-                legshots += games["stats"]["shots"]["leg"]
-                
-                if team == "Blue" and games["teams"]["blue"] > games["teams"]["red"]:
-                    wins +=1
-                elif team == "Blue" and games["teams"]["blue"] < games["teams"]["red"]:
-                    loses += 1
-                elif team == "Red" and games["teams"]["blue"] < games["teams"]["red"]:
-                    wins +=1
-                elif team == "Red" and games["teams"]["blue"] > games["teams"]["red"]:
-                    loses +=1
-                
-                acs += games["stats"]["score"]
-                adr += games["stats"]["damage"]["made"]
-                total_games+=1
-                total_rounds += games["teams"]["blue"] + games["teams"]["red"]
-            embed = discord.Embed(
-            title=f"{name}'s stats", description=f"Taken from {total_games} games - {current_act}")
-            elo = mmr['data']['elo']
-            # Use a default value of 0 if elo is None
-            elo_rr = elo % 100 if elo is not None else 0
-            embed.set_author(name=f"Current Rank: {mmr['data']['currenttierpatched']} - {elo_rr%100}RR", icon_url=account["data"]["card"]["small"], url=account["data"]["card"]["large"])
-            embed.add_field(name="Highest Rank Ever", value=f'{mmr_history["data"]["highest_rank"]["patched_tier"]} - {mmr_history["data"]["highest_rank"]["season"]}', inline=True)
-            # Access the current act data
-            data = mmr_history.get("data", {})
-            by_season = data.get("by_season", {})
-            current_act_data = by_season.get(current_act, {})
-            act_rank_wins = current_act_data.get("act_rank_wins", [])
-            if act_rank_wins:
-                highest_act_rank = act_rank_wins[0].get("patched_tier", "N/A")
-            else:
-                highest_act_rank = "N/A"
-            embed.add_field(name="Highest Rank This Act", value=f'{highest_act_rank}', inline=True)
-        
-            embed.add_field(name="Games Won", value=wins, inline=True)
-            embed.add_field(name="Games Lost", value=loses, inline=True)
-            embed.add_field(name="Win Rate", value=f"{round(wins/total_games, 2)*100}%", inline=True)
-            
-            embed.add_field(name="Average Kills", value=round(kills/total_games), inline=True)
-            embed.add_field(name="Average Deaths", value=round(deaths/total_games), inline=True)
-            embed.add_field(name="Average Assists", value=round(assists/total_games), inline=True)
-        
-            embed.add_field(name="Average HS%", value=round((headshots/total_shots)*100, 1), inline=True)
-            embed.add_field(name="Average Bodyshot%", value=round((bodyshots/total_shots)*100, 1), inline=True)
-            embed.add_field(name="Average Legshot%", value=round((legshots/total_shots)*100, 1), inline=True)
-            
-            embed.add_field(name="Average ACS", value=round(acs/total_rounds), inline=True)
-            embed.add_field(name="Average ADR", value=round(adr/total_rounds, 1), inline=True)
-            embed.set_image(url=account["data"]["card"]["wide"])
-            embed.timestamp = datetime.now()
-            
-                
-            await interaction.followup.send(embed=embed)
-        else:
-            # Handle errors
-            print(f"Failed to retrieve data: {response.status_code}")
-            await interaction.followup.send("User does not exist or API Error Please try again")
-    
-    @app_commands.command(name="valorantteam")
-    @app_commands.describe(
-        name="Player's username",
-        tag="Player's Tag",
-        region="Players'Region",
-    )
-    async def valorant_team(self, interaction: discord.Interaction, name: str, tag: str, region: Optional[str] = "NA"):
-        """Returns the stats of last games team"""
-        await interaction.response.defer()
-        api_url = f"https://api.henrikdev.xyz/valorant/v3/matches/na/{name}/{tag}?api_key={VAL_KEY}"
-        api_url2 = "https://valorant-api.com/v1/maps"
-        response = requests.get(api_url)
-        response2 = requests.get(api_url2)
-        
-        if response.status_code == 200:
-            def get_players_with_stats(team_players):
-                return [(player["name"], player["tag"], player["stats"]["score"], player["stats"]["kills"], player["stats"]["deaths"], player["stats"]["assists"], player["currenttier_patched"], player["character"]) for player in team_players]
-            def get_map_splash_url(maps_data, map_name):
-                for map_data in maps_data["data"]:
-                    if map_data.get("displayName") == map_name:
-                        return map_data.get("splash")
-                return None
+        # Check if any of the variables is a string, indicating an error or unexpected response
+        if (
+            isinstance(account_details, str)
+            or isinstance(stored_matches, str)
+            or isinstance(mmr_history, str)
+        ):
+            await interaction.followup.send(
+                f"{account_details} \n{stored_matches} \n{mmr_history}"
+            )
+            return
 
-            data = response.json()
-            maps = response2.json()
-            
-               # Skip the elements at the beginning if 'is_available' is False
-            while data["data"] and "is_available" in data["data"][0] and not data["data"][0]["is_available"]:
-                data["data"] = data["data"][1:]
+        account_level = account_details.get("account_level", "Unknown")
+        account_last_updated = account_details.get("last_update", "Unknown")
+        account_small_card = account_details.get("card", {}).get("small", "Unknown")
+        account_wide_card = account_details.get("card", {}).get("wide", "Unknown")
 
-            # Check if we have reached the end of the data
-            if not data["data"]:
-                await interaction.followup.send("User does not exist or API Error Please try again")
-                return
-            # Extract player data
-            red_players = data["data"][0]["players"]["red"]
-            blue_players = data["data"][0]["players"]["blue"]
-
-            # Get all players
-            all_players = red_players + blue_players
-
-            # Determine user's team
-            team = ""
-            for player in all_players:
-                if player["name"].lower() == name.lower():
-                    team = player['team'].lower()
-                    break
-
-            # Get team stats
-            team_won = data["data"][0]["teams"][team]["has_won"]
-            rounds_won = data["data"][0]["teams"][team]["rounds_won"]
-            rounds_lost = data["data"][0]["teams"][team]["rounds_lost"]
-            total_rounds = rounds_won + rounds_lost
-            splash_url = get_map_splash_url(maps, data["data"][0]["metadata"]["map"])
-            game_version = data["data"][0]["metadata"]["game_version"]
-            game_length_min, game_length_sec = divmod(data["data"][0]["metadata"]["game_length"], 60)
-            game_server = data["data"][0]["metadata"]["cluster"]
-
-            # Sort players by ACS
-            red_players_with_stats_sorted = sorted(get_players_with_stats(red_players), key=lambda x: x[2] / total_rounds, reverse=True)
-            blue_players_with_stats_sorted = sorted(get_players_with_stats(blue_players), key=lambda x: x[2] / total_rounds, reverse=True)
-            
-            # Create embeds
-            embed1_title = f"{name}'s team stats" if team == "red" else "Enemy team stats"
-            embed2_title = f"{name}'s team stats" if team == "blue" else "Enemy team stats"
-            embed1_description = f"Rounds: {rounds_won}-{rounds_lost}" if team == "red" else f"Rounds {rounds_lost}-{rounds_won}"
-            embed2_description = f"Rounds {rounds_won}-{rounds_lost}" if team == "blue" else f"Rounds {rounds_lost}-{rounds_won}"
-            
-            embed1 = discord.Embed(title=embed1_title, description = embed1_description)
-            for player_name, tag, score, kills, deaths, assists, rank, agent in red_players_with_stats_sorted:
-                embed1.add_field(name="Player", value=f"{player_name}#{tag} - {rank} - {agent}", inline=True)
-                embed1.add_field(name="ACS", value=round(score / total_rounds), inline=True)
-                embed1.add_field(name="KDA", value=f"{kills}/{deaths}/{assists}", inline=True)
-
-            embed2 = discord.Embed(title=embed2_title, description = embed2_description)
-            for player_name, tag, score, kills, deaths, assists, rank, agent in blue_players_with_stats_sorted:
-                embed2.add_field(name="Player", value=f"{player_name}#{tag} - {rank} - {agent}", inline=True)
-                embed2.add_field(name="ACS", value=round(score / total_rounds), inline=True)
-                embed2.add_field(name="KDA", value=f"{kills}/{deaths}/{assists}", inline=True)
-
-            embed1.set_image(url=splash_url)
-            embed1.set_footer(text=f"{game_length_min}:{game_length_sec:02d} - {game_server} - {game_version} ")
-            embed2.set_image(url=splash_url)
-            embed2.set_footer(text=f"{game_length_min}:{game_length_sec:02d} - {game_server} - {game_version} ")
-            # Send embeds
-            await interaction.followup.send(embeds=[embed1, embed2])
-        else:
-            # Handle errors
-            print(f"Failed to retrieve data: {response.status_code}")
-            await interaction.followup.send("User does not exist or API Error Please try again")
-
+        stats = self.calculate_stats(stored_matches, current_season, mmr_history)
+        embeds = self.create_embeds(
+            name,
+            account_level,
+            account_last_updated,
+            account_small_card,
+            account_wide_card,
+            stats,
+        )
+        view = ValorantEmbedChanger(embeds)
+        await interaction.followup.send(embed=embeds[0], view=view)
 
     @app_commands.command(name="valoranttracker")
     @app_commands.describe(
         name="Player's username",
         tag="Player's Tag",
     )
-    async def valorant_tracker(self, interaction: discord.Interaction, name: str, tag: str):
+    async def valorant_tracker(
+        self, interaction: discord.Interaction, name: str, tag: str
+    ):
         """Returns the stats of a valorant player's using tracker.gg api"""
         await interaction.response.defer()
         api_url = f"https://api.tracker.gg/api/v2/valorant/standard/matches/riot/{name.replace(' ', '%20')}%23{tag}"
-        
-        headers = {'User-Agent': 'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36',
-                   'Cookie': 'cf_clearance=ARR45y2wBdWY.s7EwjJ_hLgcIh4zBr9eIACnu3xsJm0-1715057869-1.0.1.1-9J4.z0KHMC8iwTZHxEErmc5nbQYt5j1idKLMISLbI.PTynhA1_aM8DgJs6z08DqYwCYf6340ttcsepZxpVmJmQ; X-Mapping-Server=s22; cf_clearance=eDLkbZ1HnlVuCeBcNtuVJX21SNyOmilcFRCcztE.17c-1716841883-1.0.1.1-sqgpLOJD3Li048S9hDPYfdBTAKFCzy_r4j.Jl3b9aD.I7O2ML5Ja5unToc4NFMVnQhhWDoSkbqhyCKA2JJ2B7g; __cflb=02DiuFQAkRrzD1P1mdkJhfdTc9AmTWwYj1vZQQJFRZEKW; session_id=d95a6756-e253-4374-a768-ed8b3ceaf700; __cf_bm=iqiod4DFjbtTDk.0ga2cNam5uW1ND_oC7CWkQuIusEc-1716845622-1.0.1.1-I3eKaaqwDdi9GmWZt94uAlQ7fyy.prRwLiqRAe6ZiC9sCN.5kmK7.34O1tvLR1EXeW4n5lRqU8eF3Mm_5rCFzHyygREoTIRT7akS9oF2_yw',
-                   'Sec-Ch-Ua': 'Google Chrome";v="125", "Chromium";v="125", "Not.A/Brand";v="24'}
+
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36",
+            "Cookie": "cf_clearance=ARR45y2wBdWY.s7EwjJ_hLgcIh4zBr9eIACnu3xsJm0-1715057869-1.0.1.1-9J4.z0KHMC8iwTZHxEErmc5nbQYt5j1idKLMISLbI.PTynhA1_aM8DgJs6z08DqYwCYf6340ttcsepZxpVmJmQ; X-Mapping-Server=s22; cf_clearance=eDLkbZ1HnlVuCeBcNtuVJX21SNyOmilcFRCcztE.17c-1716841883-1.0.1.1-sqgpLOJD3Li048S9hDPYfdBTAKFCzy_r4j.Jl3b9aD.I7O2ML5Ja5unToc4NFMVnQhhWDoSkbqhyCKA2JJ2B7g; __cflb=02DiuFQAkRrzD1P1mdkJhfdTc9AmTWwYj1vZQQJFRZEKW; session_id=d95a6756-e253-4374-a768-ed8b3ceaf700; __cf_bm=iqiod4DFjbtTDk.0ga2cNam5uW1ND_oC7CWkQuIusEc-1716845622-1.0.1.1-I3eKaaqwDdi9GmWZt94uAlQ7fyy.prRwLiqRAe6ZiC9sCN.5kmK7.34O1tvLR1EXeW4n5lRqU8eF3Mm_5rCFzHyygREoTIRT7akS9oF2_yw",
+            "Sec-Ch-Ua": 'Google Chrome";v="125", "Chromium";v="125", "Not.A/Brand";v="24',
+        }
         response = requests.get(api_url, headers=headers)
         if response.status_code == 200:
             data = response.json()
 
             # Process the data to create select options
             # Store matches data
-            matches = data['data']['matches']
-            match_details = {match['attributes']['id']: match for match in matches}
+            matches = data["data"]["matches"]
+            match_details = {match["attributes"]["id"]: match for match in matches}
 
             # Process the data to create select options
             options = []
             for match in matches:
-                map_name = match.get('metadata', {}).get('mapName', 'Unknown Map')
-                result = match.get('metadata', {}).get('result', 'Unknown Result')
-                time = match.get('metadata', {}).get('timestamp')
+                map_name = match.get("metadata", {}).get("mapName", "Unknown Map")
+                result = match.get("metadata", {}).get("result", "Unknown Result")
+                time = match.get("metadata", {}).get("timestamp")
                 if time:
-                    dt = datetime.strptime(time, '%Y-%m-%dT%H:%M:%S.%f%z')
+                    input_format = ""
+                    dt = None
+                    try:
+                        input_format = "%Y-%m-%dT%H:%M:%S.%f%z"
+                        dt = datetime.strptime(time, input_format)
+                    except ValueError:
+                        input_format = "%Y-%m-%dT%H:%M:%S%z"
+                        dt = datetime.strptime(time, input_format)
+
                     dt_adjusted = dt - timedelta(hours=4)  # Adjusting time zone
-                    formatted_time = dt_adjusted.strftime('%Y-%m-%d %I:%M %p')
+                    formatted_time = dt_adjusted.strftime("%Y-%m-%d %I:%M %p")
                 else:
-                    formatted_time = 'Unknown Time'
-                    
+                    formatted_time = "Unknown Time"
+
                 label = f"{map_name} - {result} - {formatted_time}"
-                options.append(discord.SelectOption(label=label, value=match['attributes']['id']))
-                
+                options.append(
+                    discord.SelectOption(label=label, value=match["attributes"]["id"])
+                )
+
             # Create the select menu
             select = discord.ui.Select(placeholder="Choose a match", options=options)
 
@@ -528,8 +274,18 @@ class Valorant(commands.Cog):
                 match = match_details.get(selected_match_id)
 
                 if match:
-                # Extract player stats
-                    player_stats = next((player for player in match.get('segments', []) if player.get('metadata', {}).get('platformUserHandle', '').lower() == f"{name}#{tag.lower()}"), None)
+                    # Extract player stats
+                    player_stats = next(
+                        (
+                            player
+                            for player in match.get("segments", [])
+                            if player.get("metadata", {})
+                            .get("platformUserHandle", "")
+                            .lower()
+                            == f"{name}#{tag.lower()}"
+                        ),
+                        None,
+                    )
 
                     if player_stats:
                         # Extract stats
@@ -555,21 +311,43 @@ class Valorant(commands.Cog):
                             "rank": "Rank",
                             "trnPerformanceScore": "Tracker Score",
                         }
-                        agent = player_stats.get('metadata', {}).get('agentName', "Unknown Agent")
-                        agent_url = player_stats.get('metadata', {}).get('agentImageUrl', "Unknown Url")
-                        map_name = match.get('metadata', {}).get('mapName', 'Unknown Map')
-                        embed = discord.Embed(title=f"{name}' stats on {map_name}", description=f"Agent: {agent}")
-                        embed.set_thumbnail(url = agent_url)
+                        agent = player_stats.get("metadata", {}).get(
+                            "agentName", "Unknown Agent"
+                        )
+                        agent_url = player_stats.get("metadata", {}).get(
+                            "agentImageUrl", "Unknown Url"
+                        )
+                        map_name = match.get("metadata", {}).get(
+                            "mapName", "Unknown Map"
+                        )
+                        embed = discord.Embed(
+                            title=f"{name}' stats on {map_name}",
+                            description=f"Agent: {agent}",
+                        )
+                        embed.set_thumbnail(url=agent_url)
 
                         for key, label in stats_mapping.items():
                             if key == "rank":
-                                value = player_stats.get('stats', {}).get(key, {}).get('metadata', {}).get('tierName', "Unranked")
+                                value = (
+                                    player_stats.get("stats", {})
+                                    .get(key, {})
+                                    .get("metadata", {})
+                                    .get("tierName", "Unranked")
+                                )
                             else:
-                                value = player_stats.get('stats', {}).get(key, {}).get('displayValue', 'Unknown')
+                                value = (
+                                    player_stats.get("stats", {})
+                                    .get(key, {})
+                                    .get("displayValue", "Unknown")
+                                )
                             if key == "placement":
-                                embed.add_field(name=label, value=f"{value}/10", inline=True)
+                                embed.add_field(
+                                    name=label, value=f"{value}/10", inline=True
+                                )
                             elif key == "trnPerformanceScore":
-                                embed.add_field(name=label, value=f"{value}/1000", inline=True)
+                                embed.add_field(
+                                    name=label, value=f"{value}/1000", inline=True
+                                )
                             else:
                                 embed.add_field(name=label, value=value, inline=True)
 
@@ -577,14 +355,20 @@ class Valorant(commands.Cog):
                         if splash_url:
                             embed.set_image(url=splash_url)
 
-                        playtime = player_stats.get('stats', {}).get('playtime', {}).get('displayValue', 'Unknown')
+                        playtime = (
+                            player_stats.get("stats", {})
+                            .get("playtime", {})
+                            .get("displayValue", "Unknown")
+                        )
                         embed.set_footer(text=f"Match time: {playtime}")
 
                         await interaction.response.edit_message(embed=embed)
                     else:
-                        await interaction.followup.send("Player stats not found for the selected match.")
+                        await interaction.followup.send(
+                            "Player stats not found for the selected match."
+                        )
                 else:
-                    
+
                     await interaction.followup.send("Match details not found.")
 
             select.callback = callback
@@ -598,16 +382,22 @@ class Valorant(commands.Cog):
         else:
             print(response.status_code)
             await interaction.followup.send("Error with API, Try again later")
-            
+
     @app_commands.command(name="valorantqueue")
     @app_commands.describe(
         size="Number of players before queue is full",
         queue_id="Creates a queue with ID of choice or provide an existing ID to resend that queue to the channel",
-        members = "Members that are already in queue",
+        members="Members that are already in queue",
         # role = "Role to ping"
     )
-    async def valorant_queue(self, interaction: discord.Interaction, size: Optional[int] = 5, queue_id: Optional[str] = None, members: Optional[str] = None):
-        
+    async def valorant_queue(
+        self,
+        interaction: discord.Interaction,
+        size: Optional[int] = 5,
+        queue_id: Optional[str] = None,
+        members: Optional[str] = None,
+    ):
+
         """Create a queue for valorant team of any size"""
         response = ""
         # Generate a unique queue_id using uuid
@@ -620,13 +410,17 @@ class Valorant(commands.Cog):
             else:
                 response = f"\n\nThe queue is currently empty."
             if current_queue is None:
-                await interaction.response.send_message("This queue ID does not exist", ephemeral=True)
+                await interaction.response.send_message(
+                    "This queue ID does not exist", ephemeral=True
+                )
                 return
             # Delete the previous response
             previous_message_id = self.queue_manager.get_message_id(queue_id)
             if previous_message_id:
                 try:
-                    previous_message = await interaction.channel.fetch_message(previous_message_id)
+                    previous_message = await interaction.channel.fetch_message(
+                        previous_message_id
+                    )
                     await previous_message.delete()
                     self.queue_manager.delete_message_id(queue_id)
                 except discord.NotFound:
@@ -635,76 +429,369 @@ class Valorant(commands.Cog):
             # Generate a unique queue_id using uuid
             unique_id = str(uuid.uuid4())
             queue_id = f"valorant_{interaction.channel_id}_{unique_id}"
-            
+
             if members:
                 # Split mentions and fetch members
                 mentions = members.split()
                 member_objects = []
                 for mention in mentions:
-                    member_id = int(mention.strip('<@!>'))
+                    member_id = int(mention.strip("<@!>"))
                     member = interaction.guild.get_member(member_id)
                     if member:
                         member_objects.append(member)
                         self.queue_manager.join_queue(queue_id, member)
-                
+
                 queue_members = "\n".join(user.mention for user in member_objects)
                 response = f"\n\nCurrent Queue:\n{queue_members}"
+                if len(member_objects) >= size:
+                    for member in member_objects:
+                        try:
+                            await member.send(
+                                f"{size} R's are ready\nCurrent Queue:\n{queue_members}\n"
+                            )
+                        except:
+                            print(f"\n{member.mention} could not be Dmed")
+
         # Role Mention
         role_id = 1250116396935807130  # Replace with your role ID
         role = discord.utils.get(interaction.guild.roles, id=role_id)
         role_mention = role.mention if role else ""
         # Send the new message and store its ID
-        await interaction.response.send_message(f"R's? {role_mention}{response}", view=QueueButton(self.bot, size, self.queue_manager, queue_id, interaction.user.id))
-        # await interaction.response.send_message(f"R's? {response}", view=QueueButton(self.bot, size, self.queue_manager, queue_id))
+        await interaction.response.send_message(
+            f"R's? {role_mention}{response}",
+            view=QueueButton(
+                self.bot, size, self.queue_manager, queue_id, interaction.user.id
+            ),
+        )
         new_message = await interaction.original_response()
         self.queue_manager.set_message_id(queue_id, new_message.id)
-        
-        
-    @app_commands.command(name="valorantpatch")
-    async def valorant_patch(self, interaction: discord.Interaction):
-        """Return Patch Note URl that user chooses"""
-        patch_notes_url = 'https://content.publishing.riotgames.com/publishing-content/v1.0/public/newsfeed?multigamePromoChannelId=riot_mobile_news_feeds&multigameContentGroupId=valorant&categories=announcements&categories=community&categories=media&categories=lore&categories=riot_games&categories=merch&categories=dev&categories=game-updates'
-        # Fetch patch notes data
-        response = requests.get(patch_notes_url)
-        if response.status_code == 200:
-            data = response.json()
-            patches = [
-                item for item in data.get('data', {}).get('items', [])
-                if "patch notes" in item["headline"].lower() or "patch notes" in item["description"].lower()
-            ]
-            # patches = data.get('data', {}).get('items', [])[:25]
-            
-            # Process patch notes data
-            patch_details = {patch['id']: patch for patch in patches}
-            options = []
-            for patch in patches:
-                patch_title = patch.get('headline', 'Unknown Patch')
-                label = f"{patch_title}"
-                options.append(discord.SelectOption(label=label, value=patch['id']))
 
-            # Create select menu
-            select = discord.ui.Select(placeholder="Choose a patch", options=options)
+    def calculate_stats(
+        self, matches: List[dict], season: str, mmr_history: dict
+    ) -> dict:
+        stats = {
+            "total_kills": 0,
+            "total_deaths": 0,
+            "total_assists": 0,
+            "total_games": 0,
+            "total_wins": 0,
+            "total_loses": 0,
+            "total_draws": 0,
+            "total_headshots": 0,
+            "total_bodyshots": 0,
+            "total_legshots": 0,
+            "total_score": 0,
+            "total_damage": 0,
+            "total_rounds": 0,
+            "agents_played": {},
+            "maps_played": {},
+            "peak_rank": "Unranked",
+            "current_rank": "Unranked",
+            "current_season": season,
+        }
 
-            # Define callback for select menu
-            async def callback(interaction: discord.Interaction):
-                selected_patch_id = select.values[0]
-                patch = patch_details.get(selected_patch_id)
-                if patch:
-                    patch_url = patch.get('action', {}).get('url', "unknown")
-                    await interaction.response.edit_message(content=patch_url)
-                else:
-                    await interaction.response.send_message("Patch details not found.")
+        for match in matches:
+            if (
+                match.get("meta", {}).get("season", {}).get("short", "Unknown")
+                == season
+            ):
+                stats = self.update_match_stats(stats, match, mmr_history)
 
-            select.callback = callback
+        return stats
 
-            # Create view with select menu
-            view = discord.ui.View()
-            view.add_item(select)
-            # Send the select menu to the user
-            await interaction.response.send_message(view=view)
+    def update_match_stats(self, stats: dict, match: dict, mmr_history: dict) -> dict:
+        game_stats = match.get("stats", {})
+        team_color = game_stats.get("team", "Unknown")
+        agent = game_stats.get("character", {}).get("name", "Unknown")
+        map_name = match.get("meta", {}).get("map", {}).get("name", "Unknown")
+        blue_team_rounds = match.get("teams", {}).get("blue", 0)
+        red_team_rounds = match.get("teams", {}).get("red", 0)
+
+        stats["total_kills"] += game_stats.get("kills", 0)
+        stats["total_deaths"] += game_stats.get("deaths", 0)
+        stats["total_assists"] += game_stats.get("assists", 0)
+        stats["total_games"] += 1
+        stats["total_headshots"] += game_stats.get("shots", {}).get("head", 0)
+        stats["total_bodyshots"] += game_stats.get("shots", {}).get("body", 0)
+        stats["total_legshots"] += game_stats.get("shots", {}).get("leg", 0)
+        stats["total_score"] += game_stats.get("score", 0)
+        stats["total_damage"] += game_stats.get("damage", {}).get("made", 0)
+        stats["total_rounds"] += blue_team_rounds + red_team_rounds
+        stats["agents_played"][agent] = stats["agents_played"].get(agent, 0) + 1
+        if map_name not in stats["maps_played"]:
+            stats["maps_played"][map_name] = {"wins": 0, "loses": 0, "draws": 0}
+
+        stats["peak_rank"] = (
+            mmr_history.get("peak", {}).get("season", {}).get("short", "Unknown")
+            + " - "
+            + mmr_history.get("peak", {}).get("tier", {}).get("name", "Unranked")
+        )
+        stats["current_rank"] = (
+            mmr_history.get("current", {}).get("tier", {}).get("name", "Unranked")
+            + " - "
+            + str(mmr_history.get("current", {}).get("rr", 0))
+            + " RR "
+        )
+
+        if (team_color == "Blue" and blue_team_rounds > red_team_rounds) or (
+            team_color == "Red" and red_team_rounds > blue_team_rounds
+        ):
+            stats["total_wins"] += 1
+            stats["maps_played"][map_name]["wins"] = (
+                stats["maps_played"][map_name].get("wins", 0) + 1
+            )
+        elif (team_color == "Blue" and blue_team_rounds < red_team_rounds) or (
+            team_color == "Red" and red_team_rounds < blue_team_rounds
+        ):
+            stats["total_loses"] += 1
+            stats["maps_played"][map_name]["loses"] = (
+                stats["maps_played"][map_name].get("loses", 0) + 1
+            )
         else:
-            await interaction.response.send_message("Unable to find patch note details")
-            
+            stats["total_draws"] += 1
+            stats["maps_played"][map_name]["draws"] = (
+                stats["maps_played"][map_name].get("draws", 0) + 1
+            )
+
+        return stats
+
+    def create_embeds(
+        self,
+        name: str,
+        level: str,
+        last_updated: str,
+        small_card: str,
+        wide_card: str,
+        stats: dict,
+    ) -> List[discord.Embed]:
+        current_season = stats["current_season"]
+        total_games = stats["total_games"]
+
+        if stats["total_games"] == 0:
+            embed_no_games = discord.Embed(
+                title=f"{name}'s Overview", description=f"Level {level}"
+            )
+            embed_no_games.set_image(url=wide_card)
+            embed_no_games.set_thumbnail(url=small_card)
+            embed_no_games.set_footer(
+                text=f"Current Season: {current_season} - Total Games: {total_games}"
+            )
+            return [embed_no_games]
+        total_shots = (
+            stats["total_headshots"]
+            + stats["total_bodyshots"]
+            + stats["total_legshots"]
+        )
+        average_kills = round((stats["total_kills"] / stats["total_games"]), 2)
+        average_deaths = round((stats["total_deaths"] / stats["total_games"]), 2)
+        average_assists = round((stats["total_assists"] / stats["total_games"]), 2)
+        average_headshots = round(((stats["total_headshots"] / total_shots) * 100), 2)
+        average_bodyshots = round(((stats["total_bodyshots"] / total_shots) * 100), 2)
+        average_legshots = round(((stats["total_legshots"] / total_shots) * 100), 2)
+        average_score = round(stats["total_score"] / stats["total_rounds"])
+        average_damage = round((stats["total_damage"] / stats["total_rounds"]), 2)
+        win_rate = round(((stats["total_wins"] / stats["total_games"]) * 100), 2)
+
+        embed1 = discord.Embed(title=f"{name}'s Overview", description=f"Level {level}")
+        embed1.add_field(name="Peak Rank", value=stats["peak_rank"], inline=True)
+        embed1.add_field(name="Current Rank", value=stats["current_rank"], inline=True)
+        embed1.add_field(name="Last Updated", value=last_updated, inline=True)
+        embed1.add_field(name="AVG Kills", value=average_kills, inline=True)
+        embed1.add_field(name="AVG Deaths", value=average_deaths, inline=True)
+        embed1.add_field(name="AVG Assists", value=average_assists, inline=True)
+        embed1.add_field(name="Games Won", value=stats["total_wins"], inline=True)
+        embed1.add_field(name="Games Lost", value=stats["total_loses"], inline=True)
+        embed1.add_field(name="Games Drawed", value=stats["total_draws"], inline=True)
+        embed1.add_field(name="Win Rate", value=f"{win_rate:g}%", inline=False)
+        embed1.add_field(
+            name="AVG Headshots", value=f"{average_headshots}%", inline=True
+        )
+        embed1.add_field(
+            name="AVG Bodyshots", value=f"{average_bodyshots}%", inline=True
+        )
+        embed1.add_field(name="AVG Legshots", value=f"{average_legshots}%", inline=True)
+        embed1.add_field(name="ACS", value=f"{average_score}", inline=True)
+        embed1.add_field(name="ADR", value=f"{average_damage}", inline=True)
+        embed1.add_field(name="", value="\u200b", inline=True)
+        embed1.set_image(url=wide_card)
+        embed1.set_thumbnail(url=small_card)
+        embed1.set_footer(
+            text=f"Current Season: {current_season} - Total Games: {total_games}"
+        )
+
+        embed2 = discord.Embed(
+            title=f"{name}'s Agents Played", description=f"Level {level}"
+        )
+        for key, value in sorted(
+            stats["agents_played"].items(), key=lambda item: item[1], reverse=True
+        ):
+            embed2.add_field(name=key, value=str(value), inline=True)
+        embed2.set_image(url=wide_card)
+        embed2.set_thumbnail(url=small_card)
+        embed2.set_footer(
+            text=f"Current Season: {current_season} - Total Games: {total_games}"
+        )
+
+        embed3 = discord.Embed(
+            title=f"{name}'s Maps played", description=f"Level {level}"
+        )
+        for key, value in sorted(
+            stats["maps_played"].items(),
+            key=lambda item: item[1]["wins"],
+            reverse=True,
+        ):
+            formatted_value = (
+                f"W:{value.get('wins', 0)} - "
+                f"L:{value.get('loses', 0)} - "
+                f"D:{value.get('draws', 0)}"
+            )
+            embed3.add_field(name=key, value=formatted_value, inline=True)
+        embed3.set_image(url=wide_card)
+        embed3.set_thumbnail(url=small_card)
+        embed3.set_footer(
+            text=f"Current Season: {current_season} - Total Games: {total_games}"
+        )
+
+        return [embed1, embed2, embed3]
+
+    def get_errors(self, api_json):
+        if "errors" not in api_json:
+            return "No Errors"
+
+        if "errors" in api_json:
+            errors = api_json["errors"]
+            if errors:
+                error_info = errors[0]  # Assuming you're interested in the first error
+                code = error_info.get("code", "Unknown code")
+                status = error_info.get("status", "Unknown status")
+
+        error_codes_dict = {
+            0: {
+                404: "Endpoint not found",
+                400: "General bad user input",
+                401: "Missing API Key",
+                403: "Invalid API key",
+                429: "Rate Limit",
+            },
+            1: {500: "Internal Error"},
+            2: {501: "API Endpoint in this version does not exist"},
+            3: {404: "File not found"},
+            4: {400: "Invalid File"},
+            5: {500: "Error while parsing"},
+            6: {400: "Invalid Region"},
+            7: {400: "Invalid Country Code"},
+            8: {400: "Ivalid website category"},
+            9: {500: "Error while fetching needed resource"},
+            10: {400: "Unknown raw type"},
+            11: {400: "JSON parsing error. Check input JSON"},
+            13: {500: "Internal Redis connection error"},
+            15: {500: "Premier endpoint temporary issues"},
+            16: {404: "Premier team not found"},
+            17: {400: "Query param division must be a number"},
+            18: {400: "Query param division must be a number between 1 & 21"},
+            19: {400: "Invalid premier conference"},
+            20: {400: "Premier mixed querys detected (name & tag and puuid)"},
+            21: {500: "Error while connecting to regular database"},
+            22: {404: "Account not found"},
+            23: {
+                404: "Region for user not found. Please ask the user to play a deathmatch or another gamemode"
+            },
+            24: {
+                404: "Error while fetching needed match data to retrieve users level & more"
+            },
+            25: {404: "No MMR data found for user"},
+            26: {404: "Match not found"},
+            27: {400: "Invalid mode/queue"},
+            28: {400: "Invalid map"},
+            29: {400: "Missing query param size"},
+            30: {400: "Query param size & page must be a number"},
+            31: {400: "Query param size must be greater than 0"},
+            32: {400: "Query param page must be greater than 0"},
+            33: {400: "Invalid season"},
+            34: {400: "Query name is required"},
+            35: {400: "Query tag is required"},
+            36: {404: "User not found in leaderboard"},
+        }
+
+        if code in error_codes_dict and status in error_codes_dict[code]:
+            return error_codes_dict[code][status]
+        else:
+            return "Unknown Error"
+
+    def get_account_details(self, name, tag):
+        account_api = f"https://api.henrikdev.xyz/valorant/v1/account/{name}/{tag}?force=true&api_key={VAL_KEY}"
+        account_api_response = requests.get(account_api)
+        account_api_json = account_api_response.json()
+        error_check = self.get_errors(account_api_json)
+        if error_check == "No Errors":
+            return account_api_json["data"]
+        else:
+            return error_check + " in get_account_details"
+
+    def get_stored_matches(self, region, name, tag):
+        stored_matches_api = f"https://api.henrikdev.xyz/valorant/v1/stored-matches/{region}/{name}/{tag}?mode=competitive&api_key={VAL_KEY}"
+        stored_matches_response = requests.get(stored_matches_api)
+        stored_matches_json = stored_matches_response.json()
+        error_check = self.get_errors(stored_matches_json)
+        if error_check == "No Errors":
+            return stored_matches_json["data"]
+        else:
+            return error_check + " in stored_matches"
+
+    def get_current_season(self):
+        current_season_api = (
+            f"https://api.henrikdev.xyz/valorant/v1/content?api_key={VAL_KEY}"
+        )
+        current_season_response = requests.get(current_season_api)
+        current_season_json = current_season_response.json()
+        error_check = self.get_errors(current_season_json)
+        if error_check == "No Errors":
+            current_season_acts = current_season_json["acts"]
+            active_episode = None
+            active_act = None
+
+            for act in current_season_acts:
+                if act["isActive"]:
+                    if act["type"] == "episode":
+                        active_episode = (
+                            act["name"].split(" ")[-1].lower()
+                        )  # Extract the episode number
+                    elif act["type"] == "act":
+                        active_act = (
+                            act["name"].split(" ")[-1].lower()
+                        )  # Extract the act number
+
+            # Combine the identifiers into the desired string format
+            result = (
+                f"e{active_episode}a{active_act}"
+                if active_episode and active_act
+                else "No active episode or act found"
+            )
+            return result
+        else:
+            return error_check + " in current_season"
+
+    def get_mmr_history(self, region, name, tag):
+        mrr_history_api = f"https://api.henrikdev.xyz/valorant/v3/mmr/{region}/pc/{name}/{tag}?api_key={VAL_KEY}"
+        mrr_history_response = requests.get(mrr_history_api)
+        mrr_history_json = mrr_history_response.json()
+        error_check = self.get_errors(mrr_history_json)
+        if error_check == "No Errors":
+            return mrr_history_json["data"]
+        else:
+            return error_check + " in mrr_history"
+
+    def get_match_details(self, region, match_id):
+        match_details_api = f"https://api.henrikdev.xyz/valorant/v4/match/{region}/{match_id}?api_key={VAL_KEY}"
+        match_details_response = requests.get(match_details_api)
+        match_details_json = match_details_response.json()
+        error_check = self.get_errors(match_details_json)
+        if error_check == "No Errors":
+            return match_details_json["data"]
+        else:
+            return error_check + " in match_details"
+
+
 class QueueButton(discord.ui.View):
     def __init__(self, bot, size, queue_manager, queue_id, original_user_id) -> None:
         super().__init__(timeout=None)
@@ -713,14 +800,22 @@ class QueueButton(discord.ui.View):
         self.queue_manager = queue_manager
         self.queue_id = queue_id
         self.original_user_id = original_user_id
-        
+
+        current_queue = self.queue_manager.get_queue(self.queue_id)
+        if len(current_queue) >= self.size:
+            join_button = self.children[0]  # Access the "Join Queue" button
+            join_button.disabled = True
+            join_button.label = "Queue Full"
+
     @discord.ui.button(label="Join Queue", style=discord.ButtonStyle.primary, emoji="😎")
-    async def button_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def button_callback(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
         # Role Mention
         role_id = 1250116396935807130  # Replace with your role ID
         role = discord.utils.get(interaction.guild.roles, id=role_id)
         role_mention = role.mention if role else ""
-        
+
         response = f"R's? {role_mention}"
         user = interaction.user
         current_queue = self.queue_manager.get_queue(self.queue_id)
@@ -732,7 +827,7 @@ class QueueButton(discord.ui.View):
             button.label = "Queue Full"
             await interaction.response.edit_message(content=response, view=self)
             return
-        
+
         if self.queue_manager.join_queue(self.queue_id, user):
             response += f"\n{user.mention} has joined the queue!"
         else:
@@ -745,7 +840,7 @@ class QueueButton(discord.ui.View):
             response += f"\n\nCurrent Queue:\n{queue_members}"
         else:
             response += "\n\nThe queue is currently empty."
-        
+
         current_queue_length = len(current_queue)
         if current_queue_length >= self.size:
             button.disabled = True
@@ -754,22 +849,26 @@ class QueueButton(discord.ui.View):
                 try:
                     user_dm = await self.bot.fetch_user(user.id)
                     queue_members = "\n".join(user.mention for user in current_queue)
-                    await user_dm.send(f"{self.size} R's are ready\nCurrent Queue:\n{queue_members}")
+                    await user_dm.send(
+                        f"{self.size} R's are ready\nCurrent Queue:\n{queue_members}"
+                    )
                 except:
                     response += f"\n{user.mention} could not be Dmed"
             await interaction.response.edit_message(content=response, view=self)
         else:
             await interaction.response.edit_message(content=response)
-            
+
     @discord.ui.button(label="Leave Queue", style=discord.ButtonStyle.danger, emoji="😢")
-    async def leave_queue_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def leave_queue_button(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
         # Role Mention
         role_id = 1250116396935807130  # Replace with your role ID
         role = discord.utils.get(interaction.guild.roles, id=role_id)
         role_mention = role.mention if role else ""
-        
+
         response = f"R's? {role_mention}"
-        
+
         user = interaction.user
         if self.queue_manager.leave_queue(self.queue_id, user):
             response += f"\n{user.mention} has left the queue!"
@@ -783,7 +882,7 @@ class QueueButton(discord.ui.View):
             response += f"\n\nCurrent Queue:\n{queue_members}"
         else:
             response += "\n\nThe queue is currently empty."
-        
+
         current_queue_length = len(current_queue)
         if current_queue_length < self.size:
             join_button = self.children[0]  # Access the "Join Queue" button
@@ -792,25 +891,36 @@ class QueueButton(discord.ui.View):
             await interaction.response.edit_message(content=response, view=self)
         else:
             await interaction.response.edit_message(content=response)
-            
-    @discord.ui.button(label="Delete Queue", style=discord.ButtonStyle.danger, emoji="❎")
-    async def delete_queue_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        
-        if interaction.user.id != self.original_user_id and not interaction.user.guild_permissions.manage_messages:
-            await interaction.response.send_message("You don't have permission to delete this queue.", ephemeral=True)
+
+    @discord.ui.button(
+        label="Delete Queue", style=discord.ButtonStyle.danger, emoji="❎"
+    )
+    async def delete_queue_button(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+
+        if (
+            interaction.user.id != self.original_user_id
+            and not interaction.user.guild_permissions.manage_messages
+        ):
+            await interaction.response.send_message(
+                "You don't have permission to delete this queue.", ephemeral=True
+            )
             return
-            
+
         # Check if the user has moderation permissions
         self.queue_manager.delete_queue(self.queue_id)
         previous_message_id = self.queue_manager.get_message_id(self.queue_id)
         if previous_message_id:
             try:
-                previous_message = await interaction.channel.fetch_message(previous_message_id)
+                previous_message = await interaction.channel.fetch_message(
+                    previous_message_id
+                )
                 await previous_message.delete()
                 self.queue_manager.delete_message_id(self.queue_id)
             except discord.NotFound:
                 pass
-            
+
     # @discord.ui.button(label="Show Queue ID", style=discord.ButtonStyle.danger, emoji="🆔")
     # async def show_queue_id(self, interaction: discord.Interaction, button: discord.ui.Button):
     #     if interaction.user.id != interaction.message.interaction.user.id and not interaction.user.guild_permissions.manage_messages:
@@ -819,9 +929,13 @@ class QueueButton(discord.ui.View):
 
     #     response = f"The queue ID is: \n`{self.queue_id}`"
     #     await interaction.response.send_message(response, ephemeral=True)  # Send the message only to the user who clicked the button
-        
-    @discord.ui.button(label="Resend Queue", style=discord.ButtonStyle.danger, emoji="🔄")
-    async def resend_queue(self, interaction: discord.Interaction, button: discord.ui.Button):
+
+    @discord.ui.button(
+        label="Resend Queue", style=discord.ButtonStyle.danger, emoji="🔄"
+    )
+    async def resend_queue(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
         current_queue = self.queue_manager.get_queue(self.queue_id)
         queue_members = "\n".join(user.mention for user in current_queue)
         if current_queue:
@@ -829,13 +943,17 @@ class QueueButton(discord.ui.View):
         else:
             response = f"\n\nThe queue is currently empty."
         if current_queue is None:
-            await interaction.response.send_message("This queue ID does not exist", ephemeral=True)
+            await interaction.response.send_message(
+                "This queue ID does not exist", ephemeral=True
+            )
             return
         # Delete the previous response
         previous_message_id = self.queue_manager.get_message_id(self.queue_id)
         if previous_message_id:
             try:
-                previous_message = await interaction.channel.fetch_message(previous_message_id)
+                previous_message = await interaction.channel.fetch_message(
+                    previous_message_id
+                )
                 await previous_message.delete()
                 self.queue_manager.delete_message_id(self.queue_id)
             except discord.NotFound:
@@ -844,10 +962,13 @@ class QueueButton(discord.ui.View):
         role_id = 1250116396935807130  # Replace with your role ID
         role = discord.utils.get(interaction.guild.roles, id=role_id)
         role_mention = role.mention if role else ""
-        await interaction.response.send_message(f"R's? {role_mention} {response}", view=self)
+        await interaction.response.send_message(
+            f"R's? {role_mention} {response}", view=self
+        )
         new_message = await interaction.original_response()
         self.queue_manager.set_message_id(self.queue_id, new_message.id)
-        
+
+
 # Queue manager class
 class QueueManager:
     def __init__(self):
@@ -867,7 +988,7 @@ class QueueManager:
             self.queues[queue_id].remove(user)
             return True
         return False
-    
+
     def delete_queue(self, queue_id):
         if queue_id in self.queues:
             del self.queues[queue_id]
@@ -875,10 +996,14 @@ class QueueManager:
 
     def get_queue(self, queue_id):
         return self.queues.get(queue_id, [])
-    
+
     def get_all_queues(self):
-        return {queue_id: self.queues[queue_id] for queue_id in self.queues if self.queues[queue_id]}
-    
+        return {
+            queue_id: self.queues[queue_id]
+            for queue_id in self.queues
+            if self.queues[queue_id]
+        }
+
     def set_message_id(self, queue_id, message_id):
         self.message_ids[queue_id] = message_id
 
@@ -888,6 +1013,507 @@ class QueueManager:
     def delete_message_id(self, queue_id):
         if queue_id in self.message_ids:
             del self.message_ids[queue_id]
+
+
+class ValorantEmbedChanger(discord.ui.View):
+    def __init__(
+        self, embeds: List[discord.Embed], match_selector: discord.ui.Select = None
+    ):
+        super().__init__(timeout=None)
+        self.embeds = embeds
+        self.current = 0
+        self.update_buttons()
+        self.match_selector = match_selector
+
+    def update_buttons(self):
+        self.prev_button.disabled = self.current == 0
+        self.next_button.disabled = self.current == len(self.embeds) - 1
+
+    @discord.ui.button(label="Prev", style=discord.ButtonStyle.primary, disabled=True)
+    async def prev_button(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        self.current -= 1
+        self.update_buttons()
+        if self.match_selector:
+            new_view = discord.ui.View()
+            new_view.add_item(self.prev_button)
+            new_view.add_item(self.next_button)
+            new_view.add_item(self.match_selector)
+            new_view.timeout = None
+        else:
+            new_view = self
+        await interaction.response.edit_message(
+            embed=self.embeds[self.current], view=new_view
+        )
+
+    @discord.ui.button(label="Next", style=discord.ButtonStyle.primary)
+    async def next_button(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        self.current += 1
+        self.update_buttons()
+        if self.match_selector:
+            new_view = discord.ui.View()
+            new_view.add_item(self.prev_button)
+            new_view.add_item(self.next_button)
+            new_view.add_item(self.match_selector)
+            new_view.timeout = None
+        else:
+            new_view = self
+        await interaction.response.edit_message(
+            embed=self.embeds[self.current], view=new_view
+        )
+
+
+class MatchSelector(discord.ui.Select):
+    def __init__(self, bot, stored_matches, current_season, name, tag):
+
+        self.bot = bot
+        self.name = name
+        self.tag = tag
+        options = []
+        count = 0
+        for match in stored_matches:
+            match_season = (
+                match.get("meta", {}).get("season", {}).get("short", "Unknown")
+            )
+            match_id = match.get("meta", {}).get("id", "Unknown")
+            match_time = match.get("meta", {}).get("started_at", "Unknown")
+            match_map = match.get("meta", {}).get("map", {}).get("name", "Unknown")
+
+            # Parse the date string to a datetime object
+            input_format = ""
+            date_obj = None
+            try:
+                input_format = "%Y-%m-%dT%H:%M:%S.%fZ"
+                date_obj = datetime.strptime(match_time, input_format)
+            except ValueError:
+                input_format = "%Y-%m-%dT%H:%M:%S%z"
+                date_obj = datetime.strptime(match_time, input_format)
+
+            # Convert the datetime object to the desired format
+            output_format = "%A, %B %d, %Y %I:%M %p"
+            formatted_date = date_obj.strftime(output_format)
+
+            last_match_date = datetime.strptime(
+                formatted_date, "%A, %B %d, %Y %I:%M %p"
+            )
+            adjusted_date = last_match_date - timedelta(hours=4)
+            result_date_str = adjusted_date.strftime("%A, %B %d, %Y %I:%M %p")
+            result_date = datetime.strptime(result_date_str, "%A, %B %d, %Y %I:%M %p")
+
+            if isinstance(match_id, str) and match_season == current_season:
+                option = discord.SelectOption(
+                    label=f"{match_map} - {result_date_str}", value=str(match_id)
+                )
+                options.append(option)
+                count += 1
+
+            if count >= 25:
+                break
+
+        super().__init__(placeholder="Select a match", options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        selected_value = self.values[0]  # Get the selected match ID
+        match_details = self.bot.get_cog("Valorant").get_match_details(
+            "na", selected_value
+        )
+        stats = self.calculate_stats(match_details)
+        embed = self.create_embed(stats)
+
+        embeds = self.get_team_stats(match_details, self.name, self.tag)
+        embeds.insert(0, embed)
+
+        new_view = discord.ui.View()
+        embed_changer = ValorantEmbedChanger(embeds, self)
+        new_view.add_item(embed_changer.prev_button)
+        new_view.add_item(embed_changer.next_button)
+        new_view.add_item(self)
+        new_view.timeout = None
+        await interaction.response.edit_message(embed=embeds[0], view=new_view)
+
+    def get_agent_abilities(self):
+        agent_abilities_api = f"https://valorant-api.com/v1/agents"
+        agent_abilities_response = requests.get(agent_abilities_api)
+        agent_abilities_json = agent_abilities_response.json()
+        return agent_abilities_json["data"]
+
+    def get_maps(self):
+        maps_api = f"https://valorant-api.com/v1/maps"
+        maps_response = requests.get(maps_api)
+        maps_json = maps_response.json()
+        return maps_json["data"]
+
+    def calculate_stats(self, match: dict) -> dict:
+        stats = {
+            "total_kills": 0,
+            "total_deaths": 0,
+            "total_assists": 0,
+            "total_headshots": 0,
+            "total_bodyshots": 0,
+            "total_legshots": 0,
+            "total_score": 0,
+            "total_damage": 0,
+            "total_rounds": 0,
+            "ability_casts": {
+                "Ability1": 0,
+                "Ability2": 0,
+                "Grenade": 0,
+                "Ultimate": 0,
+            },
+            "current_rank": "Unranked",
+            "first_bloods": 0,
+            "first_deaths": 0,
+            "bomb_plants": 0,
+            "bomb_defuses": 0,
+            "account_level": 0,
+            "agent_played": "Unknown",
+            "map_played": "Unknown",
+            "team": "Unknown",
+            "rounds_won": 0,
+            "rounds_lost": 0,
+            "game_time": 0,
+            "game_version": 0,
+            "game_date": 0,
+            "game_server": "Unknown",
+        }
+
+        stats = self.update_match_stats(stats, match)
+
+        return stats
+
+    def update_match_stats(self, stats: dict, match: dict) -> dict:
+        players = match.get("players", [])
+        player_stats = next(
+            player
+            for player in players
+            if player["name"].lower() == self.name.lower()
+            and player["tag"].lower() == self.tag.lower()
+        )
+        map_stats = match.get("metadata", {})
+        team_stats = match.get("teams", [])
+        team_color = next(
+            team
+            for team in team_stats
+            if team["team_id"] == player_stats.get("team_id", "Unknown")
+        )
+        stats["total_kills"] = player_stats.get("stats", {}).get("kills", 0)
+        stats["total_deaths"] = player_stats.get("stats", {}).get("deaths", 0)
+        stats["total_assists"] = player_stats.get("stats", {}).get("assists", 0)
+
+        stats["total_headshots"] = player_stats.get("stats", {}).get("headshots", 0)
+        stats["total_bodyshots"] = player_stats.get("stats", {}).get("bodyshots", 0)
+        stats["total_legshots"] = player_stats.get("stats", {}).get("legshots", 0)
+
+        stats["total_score"] = player_stats.get("stats", {}).get("score", 0)
+        stats["total_damage"] = (
+            player_stats.get("stats", {}).get("damage", {}).get("dealt", 0)
+        )
+
+        stats["ability_casts"]["Ability1"] = player_stats.get("ability_casts", {}).get(
+            "ability1", 0
+        )
+        stats["ability_casts"]["Ability2"] = player_stats.get("ability_casts", {}).get(
+            "ability2", 0
+        )
+        stats["ability_casts"]["Grenade"] = player_stats.get("ability_casts", {}).get(
+            "grenade", 0
+        )
+        stats["ability_casts"]["Ultimate"] = player_stats.get("ability_casts", {}).get(
+            "ultimate", 0
+        )
+
+        stats["current_rank"] = player_stats.get("tier", {}).get("name", "Unranked")
+        stats["account_level"] = player_stats.get("account_level", 0)
+        stats["agent_played"] = player_stats.get("agent", {}).get("name", "Unknown")
+
+        stats["map_played"] = map_stats.get("map", {}).get("name", "Unknown")
+        stats["team"] = player_stats.get("team_id", "Unknown")
+        stats["rounds_won"] = team_color.get("rounds", {}).get("won", 0)
+        stats["rounds_lost"] = team_color.get("rounds", {}).get("lost", 0)
+
+        stats["game_time"] = map_stats.get("game_length_in_ms", 0)
+        stats["game_version"] = map_stats.get("game_version", "Unknown")
+        stats["game_date"] = map_stats.get("started_at", "Unknown")
+        stats["game_server"] = map_stats.get("cluster", "Unknown")
+
+        # Process round data
+        round_data = match.get("rounds", [])
+        earliest_kill_time = {}
+        for round_number, rounds in enumerate(round_data, start=1):
+            plant_events = rounds.get("plant", {})
+            defuse_events = rounds.get("defuse", {})
+
+            if plant_events:
+                planted_by = plant_events.get("player", {})
+                if planted_by and planted_by.get("name", "").lower() == self.name:
+                    stats["bomb_plants"] += 1
+            if defuse_events:
+                defused_by = defuse_events.get("player", {})
+                if defused_by and defused_by.get("name", "").lower() == self.name:
+
+                    stats["bomb_defuses"] += 1
+
+        # Check player stats for kill events
+        for kill_event in match.get("kills", []):
+            kill_time = kill_event.get("time_in_round_in_ms")
+            killer_display_name = kill_event.get("killer", {}).get("name", "").lower()
+            victim_display_name = kill_event.get("victim", {}).get("name", "").lower()
+            round_number = kill_event.get("round")
+            if (
+                round_number not in earliest_kill_time
+                or kill_time < earliest_kill_time[round_number]["kill_time"]
+            ):
+                earliest_kill_time[round_number] = {
+                    "kill_time": kill_time,
+                    "killer_display_name": killer_display_name,
+                    "victim_display_name": victim_display_name,
+                }
+
+        # Count the first kills and deaths
+        for round_info in earliest_kill_time.values():
+            if round_info["killer_display_name"] == self.name.lower():
+                stats["first_bloods"] += 1
+            if round_info["victim_display_name"] == self.name.lower():
+                stats["first_deaths"] += 1
+
+        return stats
+
+    def create_embed(self, stats: dict) -> discord.Embed:
+        account_level = stats["account_level"]
+        total_shots = (
+            stats["total_headshots"]
+            + stats["total_bodyshots"]
+            + stats["total_legshots"]
+        )
+        rounds_won = stats["rounds_won"]
+        rounds_lost = stats["rounds_lost"]
+        total_rounds = rounds_won + rounds_lost
+        score = f"{rounds_won} - {rounds_lost}"
+
+        average_headshots = round(((stats["total_headshots"] / total_shots) * 100), 2)
+        average_bodyshots = round(((stats["total_bodyshots"] / total_shots) * 100), 2)
+        average_legshots = round(((stats["total_legshots"] / total_shots) * 100), 2)
+        average_score = round(stats["total_score"] / total_rounds)
+        average_damage = round((stats["total_damage"] / total_rounds), 2)
+
+        average_ability1_casted = round(
+            (stats["ability_casts"]["Ability1"] / total_rounds), 2
+        )
+        average_ability2_casted = round(
+            (stats["ability_casts"]["Ability2"] / total_rounds), 2
+        )
+        average_grenade_casted = round(
+            (stats["ability_casts"]["Grenade"] / total_rounds), 2
+        )
+        average_ultimate_casted = round(
+            (stats["ability_casts"]["Ultimate"] / total_rounds), 2
+        )
+
+        embed = discord.Embed(
+            title=f"{self.name}#{self.tag}'s stats",
+            description=f"Level {account_level}",
+        )
+        embed.add_field(name="Current Rank", value=stats["current_rank"], inline=True)
+        embed.add_field(name="Current Map", value=stats["map_played"], inline=True)
+        embed.add_field(name="Current Agent", value=stats["agent_played"], inline=True)
+        embed.add_field(name="Kills", value=stats["total_kills"], inline=True)
+        embed.add_field(name="Deaths", value=stats["total_deaths"], inline=True)
+        embed.add_field(name="Assists", value=stats["total_assists"], inline=True)
+        embed.add_field(name="Headshots", value=f"{average_headshots}%", inline=True)
+        embed.add_field(name="Bodyshots", value=f"{average_bodyshots}%", inline=True)
+        embed.add_field(name="Legshots", value=f"{average_legshots}%", inline=True)
+        embed.add_field(name="ACS", value=f"{average_score}", inline=True)
+        embed.add_field(name="ADR", value=f"{average_damage}", inline=True)
+        embed.add_field(name="Score", value=score, inline=True)
+
+        agent_abilities = self.get_agent_abilities()
+        agent_stats = next(
+            agent
+            for agent in agent_abilities
+            if agent["displayName"] == stats["agent_played"]
+        )
+        agent_icon = agent_stats.get("displayIcon")
+
+        maps = self.get_maps()
+        map_stats = next(
+            map_details
+            for map_details in maps
+            if map_details["displayName"] == stats["map_played"]
+        )
+        map_splash = map_stats.get("splash", "N/A")
+        # Create a dictionary to map ability slots to their display names
+        ability_display_names = {}
+        for ability in agent_stats["abilities"]:
+            ability_display_names[ability["slot"]] = ability.get("displayName")
+
+        # Retrieve the display names
+        ability1_display_name = ability_display_names.get("Ability1")
+        ability2_display_name = ability_display_names.get("Ability2")
+        grenade_display_name = ability_display_names.get("Grenade")
+        ultimate_display_name = ability_display_names.get("Ultimate")
+
+        embed.add_field(
+            name=ability1_display_name, value=average_ability1_casted, inline=True
+        )
+        embed.add_field(
+            name=grenade_display_name, value=average_grenade_casted, inline=True
+        )
+        embed.add_field(
+            name=ability2_display_name, value=average_ability2_casted, inline=True
+        )
+        embed.add_field(
+            name=ultimate_display_name, value=average_ultimate_casted, inline=False
+        )
+
+        embed.add_field(name="First Bloods", value=stats["first_bloods"], inline=True)
+        embed.add_field(name="First Deaths", value=stats["first_deaths"], inline=True)
+        embed.add_field(name="", value="\u200b", inline=True)
+        embed.add_field(name="Bomb Plants", value=stats["bomb_plants"], inline=True)
+        embed.add_field(name="Bomb Defuses", value=stats["bomb_defuses"], inline=True)
+        embed.add_field(name="", value="\u200b", inline=True)
+        embed.set_thumbnail(url=agent_icon)
+        embed.set_image(url=map_splash)
+
+        time_in_ms = stats["game_time"]
+
+        # Convert milliseconds to seconds
+        time_in_seconds = time_in_ms / 1000
+
+        # Convert seconds to hours, minutes, and seconds
+        hours = int(time_in_seconds // 3600)
+        remaining_seconds = time_in_seconds % 3600
+        minutes = int(remaining_seconds // 60)
+        seconds = round(remaining_seconds % 60)
+
+        time = 0
+        # Print the result
+        if hours > 0:
+            time = f"Game Length: {hours}:{minutes:02d}:{seconds:02d}"
+        else:
+            time = f"Game Length: {minutes:02d}:{seconds:02d}"
+
+        input_format = ""
+        date_obj = None
+        try:
+            input_format = "%Y-%m-%dT%H:%M:%S.%fZ"
+            date_obj = datetime.strptime(stats["game_date"], input_format)
+        except ValueError:
+            input_format = "%Y-%m-%dT%H:%M:%S%z"
+            date_obj = datetime.strptime(stats["game_date"], input_format)
+
+        # Convert the datetime object to the desired format
+        output_format = "%A, %B %d, %Y %I:%M %p"
+        formatted_date = date_obj.strftime(output_format)
+
+        last_match_date = datetime.strptime(formatted_date, "%A, %B %d, %Y %I:%M %p")
+        adjusted_date = last_match_date - timedelta(hours=4)
+        result_date_str = adjusted_date.strftime("%A, %B %d, %Y %I:%M %p")
+        result_date = datetime.strptime(result_date_str, "%A, %B %d, %Y %I:%M %p")
+
+        game_version = stats["game_version"]
+        game_server = stats["game_server"]
+        embed.set_footer(text=f"{time} - {game_server} - {game_version}")
+        embed.timestamp = result_date
+
+        return embed
+
+    def get_team_stats(self, match_details, name, tag):
+        players = match_details.get("players")
+        total_rounds = match_details.get("teams")[0].get("rounds", {}).get(
+            "won", 0
+        ) + match_details.get("teams")[0].get("rounds", {}).get("lost", 0)
+
+        team = next(
+            player
+            for player in players
+            if player.get("name").lower() == name.lower()
+            and player.get("tag").lower() == tag.lower()
+        )
+        team_color = team.get("team_id")
+        red_players = [player for player in players if player.get("team_id") == "Red"]
+        blue_players = [player for player in players if player.get("team_id") == "Blue"]
+
+        def get_players_with_stats(team_players):
+            return [
+                (
+                    player["name"],
+                    player["tag"],
+                    player["stats"]["score"],
+                    player["stats"]["kills"],
+                    player["stats"]["deaths"],
+                    player["stats"]["assists"],
+                    player["tier"]["name"],
+                    player["agent"]["name"],
+                )
+                for player in team_players
+            ]
+
+        # Sort players by ACS
+        red_players_with_stats_sorted = sorted(
+            get_players_with_stats(red_players),
+            key=lambda x: x[2] / total_rounds,
+            reverse=True,
+        )
+        blue_players_with_stats_sorted = sorted(
+            get_players_with_stats(blue_players),
+            key=lambda x: x[2] / total_rounds,
+            reverse=True,
+        )
+
+        # Create embeds
+        embed1_title = (
+            f"{name}'s team stats" if team_color == "Red" else "Enemy team stats"
+        )
+        embed2_title = (
+            f"{name}'s team stats" if team_color == "Blue" else "Enemy team stats"
+        )
+
+        embed1 = discord.Embed(title=embed1_title)
+        for (
+            player_name,
+            tag,
+            score,
+            kills,
+            deaths,
+            assists,
+            rank,
+            agent,
+        ) in red_players_with_stats_sorted:
+            embed1.add_field(
+                name="Player",
+                value=f"{player_name}#{tag} - {rank} - {agent}",
+                inline=True,
+            )
+            embed1.add_field(name="ACS", value=round(score / total_rounds), inline=True)
+            embed1.add_field(
+                name="KDA", value=f"{kills}/{deaths}/{assists}", inline=True
+            )
+
+        embed2 = discord.Embed(title=embed2_title)
+        for (
+            player_name,
+            tag,
+            score,
+            kills,
+            deaths,
+            assists,
+            rank,
+            agent,
+        ) in blue_players_with_stats_sorted:
+            embed2.add_field(
+                name="Player",
+                value=f"{player_name}#{tag} - {rank} - {agent}",
+                inline=True,
+            )
+            embed2.add_field(name="ACS", value=round(score / total_rounds), inline=True)
+            embed2.add_field(
+                name="KDA", value=f"{kills}/{deaths}/{assists}", inline=True
+            )
+
+        return [embed1, embed2]
 
 
 async def setup(bot: commands.Bot) -> None:

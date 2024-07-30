@@ -28,7 +28,10 @@ class Errors(commands.Cog):
     async def on_app_command_error(
         self, interaction: discord.Interaction, error: AppCommandError
     ):
-        await interaction.response.defer()
+        print(f"Error running command Interaction: {interaction} Error: {error}")
+        # Check if the interaction has been deferred
+        if not interaction.response.is_done():
+            await interaction.response.defer()
         if isinstance(error, CommandNotFound):
             await interaction.followup.send(
                 "No Command Found - Commands may not be synced - Please do /sync",
@@ -45,7 +48,9 @@ class Errors(commands.Cog):
                 ephemeral=True,
             )
         else:
-            await interaction.followup.send(f"Something went wrong", ephemeral=True)
+            await interaction.followup.send(
+                f"Something went wrong {interaction} {error}", ephemeral=True
+            )
             print(error)
 
 
