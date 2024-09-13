@@ -13,6 +13,7 @@ from discord.app_commands import Choice
 import uuid
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
+from PIL import Image, ImageDraw, ImageFont
 
 load_dotenv()
 list_of_guilds = os.getenv("GUILDS").split(",")
@@ -26,7 +27,7 @@ class Valorant(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
         self.queue_manager = QueueManager()
-
+        
     @app_commands.command(name="valorantgames")
     @app_commands.describe(
         name="Player's username",
@@ -202,7 +203,7 @@ class Valorant(commands.Cog):
         account_wide_card = account_details.get("card", {}).get("wide", "Unknown")
 
         stats = self.calculate_stats(stored_matches, current_season, mmr_history)
-        embeds = self.create_embeds(
+        embeds = self.player_all_stats_embeds(
             name,
             account_level,
             account_last_updated,
@@ -488,6 +489,7 @@ class Valorant(commands.Cog):
             "peak_rank": "Unranked",
             "current_rank": "Unranked",
             "current_season": season,
+            "clusters": {},
         }
 
         for match in matches:
@@ -503,6 +505,7 @@ class Valorant(commands.Cog):
         game_stats = match.get("stats", {})
         team_color = game_stats.get("team", "Unknown")
         agent = game_stats.get("character", {}).get("name", "Unknown")
+        cluster = match.get("meta", {}).get("cluster", "N/A")
         map_name = match.get("meta", {}).get("map", {}).get("name", "Unknown")
         blue_team_rounds = match.get("teams", {}).get("blue", 0)
         red_team_rounds = match.get("teams", {}).get("red", 0)
@@ -517,15 +520,25 @@ class Valorant(commands.Cog):
         stats["total_score"] += game_stats.get("score", 0)
         stats["total_damage"] += game_stats.get("damage", {}).get("made", 0)
         stats["total_rounds"] += blue_team_rounds + red_team_rounds
-        stats["agents_played"][agent] = stats["agents_played"].get(agent, 0) + 1
+
         if map_name not in stats["maps_played"]:
             stats["maps_played"][map_name] = {"wins": 0, "loses": 0, "draws": 0}
 
-        stats["peak_rank"] = (
-            mmr_history.get("peak", {}).get("season", {}).get("short", "Unknown")
-            + " - "
-            + mmr_history.get("peak", {}).get("tier", {}).get("name", "Unranked")
-        )
+        if agent not in stats["agents_played"]:
+            stats["agents_played"][agent] = {"wins": 0, "loses": 0, "draws": 0}
+
+        if cluster not in stats["clusters"]:
+            stats["clusters"][cluster] = {"wins": 0, "loses": 0, "draws": 0}
+
+        peak = mmr_history.get("peak")
+        if peak:
+            stats["peak_rank"] = (
+                peak.get("season", {}).get("short", "Unknown")
+                + " - "
+                + peak.get("tier", {}).get("name", "Unranked")
+            )
+        else:
+            stats["peak_rank"] = "Unknown - Unranked"
         stats["current_rank"] = (
             mmr_history.get("current", {}).get("tier", {}).get("name", "Unranked")
             + " - "
@@ -540,6 +553,12 @@ class Valorant(commands.Cog):
             stats["maps_played"][map_name]["wins"] = (
                 stats["maps_played"][map_name].get("wins", 0) + 1
             )
+            stats["agents_played"][agent]["wins"] = (
+                stats["agents_played"][agent].get("wins", 0) + 1
+            )
+            stats["clusters"][cluster]["wins"] = (
+                stats["clusters"][cluster].get("wins", 0) + 1
+            )
         elif (team_color == "Blue" and blue_team_rounds < red_team_rounds) or (
             team_color == "Red" and red_team_rounds < blue_team_rounds
         ):
@@ -547,15 +566,26 @@ class Valorant(commands.Cog):
             stats["maps_played"][map_name]["loses"] = (
                 stats["maps_played"][map_name].get("loses", 0) + 1
             )
+            stats["agents_played"][agent]["loses"] = (
+                stats["agents_played"][agent].get("loses", 0) + 1
+            )
+            stats["clusters"][cluster]["loses"] = (
+                stats["clusters"][cluster].get("loses", 0) + 1
+            )
         else:
             stats["total_draws"] += 1
             stats["maps_played"][map_name]["draws"] = (
                 stats["maps_played"][map_name].get("draws", 0) + 1
             )
-
+            stats["agents_played"][agent]["draws"] = (
+                stats["agents_played"][agent].get("draws", 0) + 1
+            )
+            stats["clusters"][cluster]["draws"] = (
+                stats["clusters"][cluster].get("draws", 0) + 1
+            )
         return stats
 
-    def create_embeds(
+    def player_all_stats_embeds(
         self,
         name: str,
         level: str,
@@ -623,9 +653,18 @@ class Valorant(commands.Cog):
             title=f"{name}'s Agents Played", description=f"Level {level}"
         )
         for key, value in sorted(
-            stats["agents_played"].items(), key=lambda item: item[1], reverse=True
+            stats["agents_played"].items(),
+            key=lambda item: item[1]["wins"],
+            reverse=True,
         ):
-            embed2.add_field(name=key, value=str(value), inline=True)
+            formatted_value = (
+                f"W:{value.get('wins', 0)} - "
+                f"L:{value.get('loses', 0)} - "
+                f"D:{value.get('draws', 0)}"
+            )
+            embed2.add_field(name=key, value=formatted_value, inline=True)
+
+            # embed2.add_field(name=key, value=str(value), inline=True)
         embed2.set_image(url=wide_card)
         embed2.set_thumbnail(url=small_card)
         embed2.set_footer(
@@ -652,7 +691,24 @@ class Valorant(commands.Cog):
             text=f"Current Season: {current_season} - Total Games: {total_games}"
         )
 
-        return [embed1, embed2, embed3]
+        embed4 = discord.Embed(title=f"{name}'s Clusters played")
+        for key, value in sorted(
+            stats["clusters"].items(),
+            key=lambda item: item[1]["wins"],
+            reverse=True,
+        ):
+            formatted_value = (
+                f"W:{value.get('wins', 0)} - "
+                f"L:{value.get('loses', 0)} - "
+                f"D:{value.get('draws', 0)}"
+            )
+            embed4.add_field(name=key, value=formatted_value, inline=True)
+        embed4.set_image(url=wide_card)
+        embed4.set_thumbnail(url=small_card)
+        embed4.set_footer(
+            text=f"Current Season: {current_season} - Total Games: {total_games}"
+        )
+        return [embed1, embed2, embed3, embed4]
 
     def get_errors(self, api_json):
         if "errors" not in api_json:
@@ -783,6 +839,7 @@ class Valorant(commands.Cog):
 
     def get_match_details(self, region, match_id):
         match_details_api = f"https://api.henrikdev.xyz/valorant/v4/match/{region}/{match_id}?api_key={VAL_KEY}"
+        print(match_details_api)
         match_details_response = requests.get(match_details_api)
         match_details_json = match_details_response.json()
         error_check = self.get_errors(match_details_json)
@@ -1068,10 +1125,9 @@ class ValorantEmbedChanger(discord.ui.View):
 
 class MatchSelector(discord.ui.Select):
     def __init__(self, bot, stored_matches, current_season, name, tag):
-
         self.bot = bot
-        self.name = name
-        self.tag = tag
+        self.name = name.lower()
+        self.tag = tag.lower()
         options = []
         count = 0
         for match in stored_matches:
@@ -1121,18 +1177,27 @@ class MatchSelector(discord.ui.Select):
             "na", selected_value
         )
         stats = self.calculate_stats(match_details)
-        embed = self.create_embed(stats)
+        embed = self.player_match_stats_embeds(stats)
 
         embeds = self.get_team_stats(match_details, self.name, self.tag)
-        embeds.insert(0, embed)
+        all_embeds = embed + embeds
 
         new_view = discord.ui.View()
-        embed_changer = ValorantEmbedChanger(embeds, self)
+        embed_changer = ValorantEmbedChanger(all_embeds, self)
         new_view.add_item(embed_changer.prev_button)
         new_view.add_item(embed_changer.next_button)
         new_view.add_item(self)
         new_view.timeout = None
-        await interaction.response.edit_message(embed=embeds[0], view=new_view)
+
+        # Step 2: Get the Absolute Path (Optional)
+        image_path = "output_image.png"
+        absolute_image_path = os.path.abspath(image_path)
+        with open(absolute_image_path, "rb") as f:
+            picture = discord.File(f)
+
+        await interaction.response.edit_message(
+            embed=all_embeds[0], view=new_view, attachments=[picture]
+        )
 
     def get_agent_abilities(self):
         agent_abilities_api = f"https://valorant-api.com/v1/agents"
@@ -1178,6 +1243,9 @@ class MatchSelector(discord.ui.Select):
             "game_version": 0,
             "game_date": 0,
             "game_server": "Unknown",
+            "placement": "N/A",
+            "duels": {},
+            "weapons": {},
         }
 
         stats = self.update_match_stats(stats, match)
@@ -1189,8 +1257,7 @@ class MatchSelector(discord.ui.Select):
         player_stats = next(
             player
             for player in players
-            if player["name"].lower() == self.name.lower()
-            and player["tag"].lower() == self.tag.lower()
+            if player["name"].lower() == self.name and player["tag"].lower() == self.tag
         )
         map_stats = match.get("metadata", {})
         team_stats = match.get("teams", [])
@@ -1199,6 +1266,7 @@ class MatchSelector(discord.ui.Select):
             for team in team_stats
             if team["team_id"] == player_stats.get("team_id", "Unknown")
         )
+
         stats["total_kills"] = player_stats.get("stats", {}).get("kills", 0)
         stats["total_deaths"] = player_stats.get("stats", {}).get("deaths", 0)
         stats["total_assists"] = player_stats.get("stats", {}).get("assists", 0)
@@ -1239,6 +1307,40 @@ class MatchSelector(discord.ui.Select):
         stats["game_date"] = map_stats.get("started_at", "Unknown")
         stats["game_server"] = map_stats.get("cluster", "Unknown")
 
+        players = match.get("players", [])
+        total_rounds = stats["rounds_won"] + stats["rounds_lost"]
+
+        def get_players_with_stats(team_players):
+            return [
+                (
+                    player["name"],
+                    player["tag"],
+                    player["stats"]["score"],
+                    player["stats"]["kills"],
+                    player["stats"]["deaths"],
+                    player["stats"]["assists"],
+                    player["tier"]["name"],
+                    player["agent"]["name"],
+                )
+                for player in players
+            ]
+
+        # Sort players by ACS
+        players_with_stats_sorted = sorted(
+            get_players_with_stats(players),
+            key=lambda x: x[2] / total_rounds,
+            reverse=True,
+        )
+        # Find the index of the player
+        stats["placement"] = next(
+            (
+                i + 1
+                for i, player in enumerate(players_with_stats_sorted)
+                if player[0].lower() == self.name and player[1].lower() == self.tag
+            ),
+            None,
+        )
+
         # Process round data
         round_data = match.get("rounds", [])
         earliest_kill_time = {}
@@ -1256,12 +1358,20 @@ class MatchSelector(discord.ui.Select):
 
                     stats["bomb_defuses"] += 1
 
-        # Check player stats for kill events
+        # Check player stats for first bloods and first deaths
         for kill_event in match.get("kills", []):
             kill_time = kill_event.get("time_in_round_in_ms")
-            killer_display_name = kill_event.get("killer", {}).get("name", "").lower()
-            victim_display_name = kill_event.get("victim", {}).get("name", "").lower()
+            killer = kill_event.get("killer", {})
+            victim = kill_event.get("victim", {})
+
+            killer_display_name = killer.get("name", "").lower()
+            killer_display_tag = killer.get("tag", "").lower()
+            victim_display_name = victim.get("name", "").lower()
+            victim_display_tag = victim.get("tag", "").lower()
+            weapon = kill_event.get("weapon", {}).get("name", "")
             round_number = kill_event.get("round")
+
+            # Track the earliest kill time in the round
             if (
                 round_number not in earliest_kill_time
                 or kill_time < earliest_kill_time[round_number]["kill_time"]
@@ -1269,19 +1379,42 @@ class MatchSelector(discord.ui.Select):
                 earliest_kill_time[round_number] = {
                     "kill_time": kill_time,
                     "killer_display_name": killer_display_name,
+                    "killer_display_tag": killer_display_tag,
                     "victim_display_name": victim_display_name,
+                    "victim_display_tag": victim_display_tag,
                 }
+
+            # Handle duels involving self (either as killer or victim)
+            if killer_display_name == self.name and killer_display_tag == self.tag:
+                duel_key = f"{victim_display_name}#{victim_display_tag}"
+                stats["duels"].setdefault(duel_key, {"Kills": 0, "Deaths": 0})
+                stats["duels"][duel_key]["Kills"] += 1
+
+                # Track weapon usage
+                stats["weapons"].setdefault(weapon, {"Kills": 0})
+                stats["weapons"][weapon]["Kills"] += 1
+
+            elif victim_display_name == self.name and victim_display_tag == self.tag:
+                duel_key = f"{killer_display_name}#{killer_display_tag}"
+                stats["duels"].setdefault(duel_key, {"Kills": 0, "Deaths": 0})
+                stats["duels"][duel_key]["Deaths"] += 1
 
         # Count the first kills and deaths
         for round_info in earliest_kill_time.values():
-            if round_info["killer_display_name"] == self.name.lower():
+            if (
+                round_info["killer_display_name"] == self.name
+                and round_info["killer_display_tag"] == self.tag
+            ):
                 stats["first_bloods"] += 1
-            if round_info["victim_display_name"] == self.name.lower():
+            if (
+                round_info["victim_display_name"] == self.name
+                and round_info["victim_display_tag"] == self.tag
+            ):
                 stats["first_deaths"] += 1
 
         return stats
 
-    def create_embed(self, stats: dict) -> discord.Embed:
+    def player_match_stats_embeds(self, stats: dict) -> discord.Embed:
         account_level = stats["account_level"]
         total_shots = (
             stats["total_headshots"]
@@ -1356,16 +1489,24 @@ class MatchSelector(discord.ui.Select):
         ultimate_display_name = ability_display_names.get("Ultimate")
 
         embed.add_field(
-            name=ability1_display_name, value=average_ability1_casted, inline=True
+            name=ability1_display_name,
+            value=f"{average_ability1_casted} casts per round",
+            inline=True,
         )
         embed.add_field(
-            name=grenade_display_name, value=average_grenade_casted, inline=True
+            name=grenade_display_name,
+            value=f"{average_grenade_casted} casts per round",
+            inline=True,
         )
         embed.add_field(
-            name=ability2_display_name, value=average_ability2_casted, inline=True
+            name=ability2_display_name,
+            value=f"{average_ability2_casted} casts per round",
+            inline=True,
         )
         embed.add_field(
-            name=ultimate_display_name, value=average_ultimate_casted, inline=False
+            name=ultimate_display_name,
+            value=f"{average_ultimate_casted} casts per round",
+            inline=False,
         )
 
         embed.add_field(name="First Bloods", value=stats["first_bloods"], inline=True)
@@ -1374,6 +1515,7 @@ class MatchSelector(discord.ui.Select):
         embed.add_field(name="Bomb Plants", value=stats["bomb_plants"], inline=True)
         embed.add_field(name="Bomb Defuses", value=stats["bomb_defuses"], inline=True)
         embed.add_field(name="", value="\u200b", inline=True)
+        embed.add_field(name="Placement", value=f'{stats["placement"]}/10', inline=True)
         embed.set_thumbnail(url=agent_icon)
         embed.set_image(url=map_splash)
 
@@ -1418,20 +1560,48 @@ class MatchSelector(discord.ui.Select):
         embed.set_footer(text=f"{time} - {game_server} - {game_version}")
         embed.timestamp = result_date
 
-        return embed
+        embed1 = discord.Embed(
+            title=f"{self.name}#{self.tag}'s Duels",
+            description=f"Level {account_level}",
+        )
+        for key, value in sorted(
+            stats["duels"].items(),
+            key=lambda item: item[1]["Kills"],
+            reverse=True,
+        ):
+            embed1.add_field(name="Player", value=key, inline=True)
+            embed1.add_field(name="Kills", value=value.get("Kills", 0), inline=True)
+            embed1.add_field(name="Deaths", value=value.get("Deaths", 0), inline=True)
+
+        print(stats["weapons"])
+        embed2 = discord.Embed(
+            title=f"{self.name}#{self.tag}'s Weapons",
+            description=f"Level {account_level}",
+        )
+        for key, value in sorted(
+            stats["weapons"].items(),
+            key=lambda item: item[1]["Kills"],
+            reverse=True,
+        ):
+            embed2.add_field(name="Weapon", value=key, inline=True)
+            embed2.add_field(name="Kills", value=value.get("Kills", 0), inline=True)
+            embed2.add_field(name="", value="\u200b", inline=True)
+
+        return [embed, embed1, embed2]
 
     def get_team_stats(self, match_details, name, tag):
         players = match_details.get("players")
         total_rounds = match_details.get("teams")[0].get("rounds", {}).get(
             "won", 0
         ) + match_details.get("teams")[0].get("rounds", {}).get("lost", 0)
-
+        map_name = match_details.get("metadata").get("map").get("name")
         team = next(
             player
             for player in players
             if player.get("name").lower() == name.lower()
             and player.get("tag").lower() == tag.lower()
         )
+        name = f"{name}#{tag}".lower()
         team_color = team.get("team_id")
         red_players = [player for player in players if player.get("team_id") == "Red"]
         blue_players = [player for player in players if player.get("team_id") == "Blue"]
@@ -1446,6 +1616,7 @@ class MatchSelector(discord.ui.Select):
                     player["stats"]["deaths"],
                     player["stats"]["assists"],
                     player["tier"]["name"],
+                    player["stats"]["damage"]["dealt"],
                     player["agent"]["name"],
                 )
                 for player in team_players
@@ -1471,7 +1642,28 @@ class MatchSelector(discord.ui.Select):
             f"{name}'s team stats" if team_color == "Blue" else "Enemy team stats"
         )
 
+        team = next(
+            (
+                team
+                for team in match_details.get("teams")
+                if team["team_id"] == team_color
+            ),
+            None,
+        )
+        rounds_won = team.get("rounds").get("won")
+        rounds_lost = team.get("rounds").get("lost")
+
         embed1 = discord.Embed(title=embed1_title)
+        embed2 = discord.Embed(title=embed2_title)
+
+        # Example player data (fill this in with real data)
+        team_a_players = [
+            ["Name", "Rank", "ACS", "Kills", "Deaths", "Assists", "ADR", "Agent"],
+        ]
+        team_b_players = [
+            ["Name", "Rank", "ACS", "Kills", "Deaths", "Assists", "ADR", "Agent"],
+        ]
+
         for (
             player_name,
             tag,
@@ -1480,6 +1672,7 @@ class MatchSelector(discord.ui.Select):
             deaths,
             assists,
             rank,
+            damage,
             agent,
         ) in red_players_with_stats_sorted:
             embed1.add_field(
@@ -1491,8 +1684,19 @@ class MatchSelector(discord.ui.Select):
             embed1.add_field(
                 name="KDA", value=f"{kills}/{deaths}/{assists}", inline=True
             )
+            team_a_players.append(
+                [
+                    f"{player_name}#{tag}",
+                    f"{rank}",
+                    f"{score / total_rounds}",
+                    f"{kills}",
+                    f"{deaths}",
+                    f"{assists}",
+                    f"{damage/total_rounds}",
+                    f"{agent}",
+                ]
+            )
 
-        embed2 = discord.Embed(title=embed2_title)
         for (
             player_name,
             tag,
@@ -1501,6 +1705,7 @@ class MatchSelector(discord.ui.Select):
             deaths,
             assists,
             rank,
+            damage,
             agent,
         ) in blue_players_with_stats_sorted:
             embed2.add_field(
@@ -1512,7 +1717,106 @@ class MatchSelector(discord.ui.Select):
             embed2.add_field(
                 name="KDA", value=f"{kills}/{deaths}/{assists}", inline=True
             )
+            team_b_players.append(
+                [
+                    f"{player_name}#{tag}",
+                    f"{rank}",
+                    f"{score / total_rounds}",
+                    f"{kills}",
+                    f"{deaths}",
+                    f"{assists}",
+                    f"{damage/total_rounds}",
+                    f"{agent}",
+                ]
+            )
+        # Create a new blank image with a white background
+        width, height = 1400, 600
+        image = Image.new("RGB", (width, height), "white")
+        draw = ImageDraw.Draw(image)
 
+        # Define fonts
+        font_path = (
+            "./public/fonts/Roboto-Bold.ttf"  # Replace with the path to your font file
+        )
+        font_large = ImageFont.truetype(font_path, 20)
+        font_small = ImageFont.truetype(font_path, 16)
+
+        # Define some colors
+        team_a_color = (24, 100, 79)  # Dark Green
+        team_b_color = (91, 22, 22)  # Dark Red
+        text_color_white = (255, 255, 255)
+        text_color_black = (0, 0, 0)
+
+        draw.rectangle([(0, 0), (width, 50)], fill=team_a_color)
+        draw.text(
+            (10, 10),
+            f"{embed1.title}",
+            font=font_large,
+            fill=text_color_white,
+        )
+
+        draw.text(
+            (310, 10),
+            f"Rounds: {rounds_won if name in embed1.title else rounds_lost}",
+            font=font_large,
+            fill=text_color_white,
+        )
+        draw.text(
+            (560, 10),
+            f"Map: {map_name}",
+            font=font_large,
+            fill=text_color_white,
+        )
+
+        draw.rectangle([(0, 300), (width, 350)], fill=team_b_color)
+        draw.text(
+            (10, 310),
+            f"{embed2.title} {rounds_won if name in embed2.title else rounds_lost}",
+            font=font_large,
+            fill=text_color_white,
+        )
+
+        draw.text(
+            (310, 310),
+            f"Rounds: {rounds_won if name in embed2.title else rounds_lost}",
+            font=font_large,
+            fill=text_color_white,
+        )
+
+        # Function to draw player data rows
+        def draw_player_row(y_offset, player_data, team_color):
+            x_offset = 10
+            draw.rectangle([(0, y_offset), (width, y_offset + 40)], fill=team_color)
+            for index, item in enumerate(player_data):
+                draw.text(
+                    (x_offset, y_offset + 10),
+                    str(item),
+                    font=font_small,
+                    fill=text_color_white,
+                )
+                # Increment x_offset only after the first items
+                if index < 1:
+                    x_offset += 300
+                else:
+                    x_offset += 125
+
+        # Draw team A rows
+        y_offset = 40
+        for player in team_a_players:
+            draw_player_row(y_offset, player, team_a_color)
+            y_offset += 40
+
+        # Draw team B rows
+        y_offset = 340
+        for player in team_b_players:
+            draw_player_row(y_offset, player, team_b_color)
+            y_offset += 40
+
+        # Specify the image path to save the file
+        image_path = "output_image.png"
+
+        # Save the image
+        image.save(image_path)
         return [embed1, embed2]
 
 

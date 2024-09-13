@@ -84,20 +84,21 @@ class Development(commands.Cog):
         # reloading the cogs for each server
         # sync the commands for each guild
         await interaction.response.defer()
-        if not server:
-            for filename in os.listdir(f"./cogs"):
-                if filename.endswith(".py"):
-                    await self.bot.reload_extension(f"cogs.{filename[:-3]}")
-            await self.bot.tree.sync(guild=discord.Object(int(interaction.guild.id)))
-            await interaction.followup.send(f"{interaction.guild.name} synced")
-        elif server == "All Servers":
+        if server == "All Servers":
             for filename in os.listdir(f"./cogs"):
                 if filename.endswith(".py"):
                     await self.bot.reload_extension(f"cogs.{filename[:-3]}")
             for guild in MY_GUILDS:
                 synced = await self.bot.tree.sync(guild=guild)
-            # await interaction.followup.send(f"{len(self.bot.guilds)} servers synced")
-            await interaction.followup.send(f"Synced {len(synced)} commands globally to {len(MY_GUILDS)} guilds")
+            await interaction.followup.send(
+                f"Synced {len(synced)} commands globally to {len(MY_GUILDS)} guilds"
+            )
+        else:
+            for filename in os.listdir(f"./cogs"):
+                if filename.endswith(".py"):
+                    await self.bot.reload_extension(f"cogs.{filename[:-3]}")
+            await self.bot.tree.sync(guild=discord.Object(int(interaction.guild.id)))
+            await interaction.followup.send(f"{interaction.guild.name} synced")
 
     @app_commands.command(name="stats", description="show stats of the bot")
     async def stats(self, interaction: discord.Interaction):
@@ -151,16 +152,18 @@ class Development(commands.Cog):
         try:
             await self.bot.change_presence(
                 activity=discord.Activity(
-                    type=discord.ActivityType.competing, name=random.choice(randomStatus)
+                    type=discord.ActivityType.competing,
+                    name=random.choice(randomStatus),
                 )
             )
         except discord.HTTPException as e:
             if e.status == 429:  # Rate limit status code
-                retry_after = int(e.response.headers.get('Retry-After', 5))
+                retry_after = int(e.response.headers.get("Retry-After", 5))
                 await asyncio.sleep(retry_after)
                 await self.bot.change_presence(
                     activity=discord.Activity(
-                        type=discord.ActivityType.competing, name=random.choice(randomStatus)
+                        type=discord.ActivityType.competing,
+                        name=random.choice(randomStatus),
                     )
                 )
 

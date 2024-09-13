@@ -63,61 +63,67 @@ class Games(commands.Cog):
         notes: Optional[str] = "No Notes",
     ):
         """Easy embed for games download"""
+        try:
+            # bs4 to parse through steam link for data
+            url = steam_link
+            response = requests.get(url, timeout=100)
+            soup = BeautifulSoup(response.text, features="html.parser")
+            genres = ""
+            for index, genre in enumerate(soup.find_all(class_="app_tag")):
+                if index >= 5:
+                    break
+                if genre.contents[0].strip() == "+":
+                    continue
+                genres += f"`{genre.contents[0].strip()}` "
 
-        # bs4 to parse through steam link for data
-        url = steam_link
-        response = requests.get(url, timeout=100)
-        soup = BeautifulSoup(response.text, features="html.parser")
-        genres = ""
-        for index, genre in enumerate(soup.find_all(class_="app_tag")):
-            if index >= 5:
-                break
-            if genre.contents[0].strip() == "+":
-                continue
-            genres += f"`{genre.contents[0].strip()}` "
-
-        title = soup.select_one('div[class="apphub_AppName"]').contents[0]
-        description = soup.find("meta", property="og:description")["content"]
-        image = soup.find("meta", property="og:image")["content"]
-        if soup.select_one('div[class="discount_original_price"]'):
-            original_price = soup.select_one(
-                'div[class="discount_original_price"]'
-            ).contents[0]
-            discounted_price = soup.select_one(
-                'div[class="discount_final_price"]'
-            ).contents[0]
-            price = f"~~{original_price}~~\n{discounted_price}"
-        else:
-            price = soup.select_one('div[class="game_purchase_price price"]').contents[
-                0
-            ]
-        reviews = soup.find("meta", itemprop="reviewCount")["content"]
-        reviews_description = soup.find("span", itemprop="description").contents[0]
-        app_id = soup.find("meta", property="og:url")["content"].split("/")[4]
-        build_link = f"https://steamdb.info/app/{app_id}/patchnotes/"
-        embed = discord.Embed(title=f"{add} - {title}", color=0x336EFF, url=steam_link, description=f"[Build {build}]({build_link})" if build else "")
-        embed.add_field(
-            name="Direct Download Link",
-            value=f"[Click Here]({download_link})",
-            inline=False,
-        )
-        embed.add_field(
-            name="Full Games List", value=f"[Click Here]({GAMES})", inline=False
-        )
-        embed.add_field(
-            name="Steam Link", value=f"[Click Here]({steam_link})", inline=False
-        )
-        embed.add_field(name="Description", value=f"{description}", inline=False)
-        embed.add_field(name="Notes", value=f"{notes}", inline=False)
-        embed.add_field(name="Price", value=f"{price}", inline=True)
-        embed.add_field(
-            name="Reviews", value=f"{reviews_description} ({reviews})", inline=True
-        )
-        embed.add_field(name="App Id", value=f"{app_id}", inline=True)
-        embed.add_field(name="Genres", value=f"{genres}", inline=False)
-        embed.set_image(url=image)
-        embed.timestamp = datetime.now()
-        embed.set_footer(text=f"{interaction.user}", icon_url=interaction.user.avatar)
+            title = soup.select_one('div[class="apphub_AppName"]').contents[0]
+            description = soup.find("meta", property="og:description")["content"]
+            image = soup.find("meta", property="og:image")["content"]
+            if soup.select_one('div[class="discount_original_price"]'):
+                original_price = soup.select_one(
+                    'div[class="discount_original_price"]'
+                ).contents[0]
+                discounted_price = soup.select_one(
+                    'div[class="discount_final_price"]'
+                ).contents[0]
+                price = f"~~{original_price}~~\n{discounted_price}"
+            else:
+                if soup.select_one('div[class="game_purchase_price price"]'):
+                    price = soup.select_one('div[class="game_purchase_price price"]').contents[
+                        0
+                    ]
+                else:
+                    price = "N/A"
+            reviews = soup.find("meta", itemprop="reviewCount")["content"]
+            reviews_description = soup.find("span", itemprop="description").contents[0]
+            app_id = soup.find("meta", property="og:url")["content"].split("/")[4]
+            build_link = f"https://steamdb.info/app/{app_id}/patchnotes/"
+            embed = discord.Embed(title=f"{add} - {title}", color=0x336EFF, url=steam_link, description=f"[Build {build}]({build_link})" if build else "")
+            embed.add_field(
+                name="Direct Download Link",
+                value=f"[Click Here]({download_link})",
+                inline=False,
+            )
+            embed.add_field(
+                name="Full Games List", value=f"[Click Here]({GAMES})", inline=False
+            )
+            embed.add_field(
+                name="Steam Link", value=f"[Click Here]({steam_link})", inline=False
+            )
+            embed.add_field(name="Description", value=f"```{description}```", inline=False)
+            embed.add_field(name="Notes", value=f"```{notes}```", inline=False)
+            embed.add_field(name="Price", value=f"{price}", inline=True)
+            embed.add_field(
+                name="Reviews", value=f"{reviews_description} ({reviews})", inline=True
+            )
+            embed.add_field(name="App Id", value=f"{app_id}", inline=True)
+            embed.add_field(name="Genres", value=f"{genres}", inline=False)
+            embed.set_image(url=image)
+            embed.timestamp = datetime.now()
+            embed.set_footer(text=f"{interaction.user}", icon_url=interaction.user.avatar)
+        except Exception as e:
+            print(e)
+            return
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(
