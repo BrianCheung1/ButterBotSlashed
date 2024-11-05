@@ -839,7 +839,6 @@ class Valorant(commands.Cog):
 
     def get_match_details(self, region, match_id):
         match_details_api = f"https://api.henrikdev.xyz/valorant/v4/match/{region}/{match_id}?api_key={VAL_KEY}"
-        print(match_details_api)
         match_details_response = requests.get(match_details_api)
         match_details_json = match_details_response.json()
         error_check = self.get_errors(match_details_json)
@@ -1573,7 +1572,6 @@ class MatchSelector(discord.ui.Select):
             embed1.add_field(name="Kills", value=value.get("Kills", 0), inline=True)
             embed1.add_field(name="Deaths", value=value.get("Deaths", 0), inline=True)
 
-        print(stats["weapons"])
         embed2 = discord.Embed(
             title=f"{self.name}#{self.tag}'s Weapons",
             description=f"Level {account_level}",

@@ -11,6 +11,9 @@ import tmdbsimple as tmdb
 from pytz import timezone
 import kitsu
 import asyncio
+import aiosqlite
+import random
+import re
 
 tmdb.API_KEY = os.getenv("TMDB")
 
@@ -24,6 +27,34 @@ class General(commands.Cog):
 
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
+        self.db_folder = "database"
+
+        # Ensure the 'database' folder exists
+        if not os.path.exists(self.db_folder):
+            os.makedirs(self.db_folder)
+
+        # Initialize the table in the background
+        self.bot.loop.create_task(self.create_table())
+
+    def get_db_name(self, guild_id):
+        """Generate a unique database name based on the guild ID."""
+        return os.path.join(self.db_folder, f"movies_{guild_id}.db")
+
+    async def create_table(self):
+        """Ensure the movies table exists for the specified guild."""
+        for guild in MY_GUILDS:
+            db_name = self.get_db_name(guild.id)
+            async with aiosqlite.connect(db_name) as db:
+                await db.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS movies (
+                        id INTEGER PRIMARY KEY,
+                        name TEXT NOT NULL UNIQUE,
+                        link TEXT NOT NULL UNIQUE
+                    )
+                """
+                )
+                await db.commit()
 
     @app_commands.command(name="invite", description="Invite me to your discord server")
     async def invite(self, interaction: discord.Interaction):
@@ -193,6 +224,153 @@ class General(commands.Cog):
             value=f'{datetime.now(timezone(timezones)).strftime("%I:%M:%p")}',
         )
         await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="add_movies")
+    async def add_movies(self, interaction: discord.Interaction, movie_links: str):
+        """
+        Add one or multiple movies to the database using IMDb links.
+        Use commas to separate multiple movie links.
+        """
+        guild_id = interaction.guild.id
+        await self.create_table()  # Ensure the table exists for the guild
+
+        # Split the input by commas and strip whitespace
+        link_list = [link.strip() for link in movie_links.split(",")]
+
+        db_name = self.get_db_name(guild_id)
+        async with aiosqlite.connect(db_name) as db:
+            added_movies = []
+            duplicate_movies = []
+
+            for link in link_list:
+                movie_name = await self.get_movie_name_from_imdb(link)
+                if not movie_name:
+                    continue  # Skip if movie name couldn't be retrieved
+
+                try:
+                    await db.execute(
+                        "INSERT INTO movies (name, link) VALUES (?, ?)",
+                        (movie_name, link),
+                    )
+                    added_movies.append((movie_name, link))  # Store both name and link
+                except aiosqlite.IntegrityError:
+                    duplicate_movies.append(movie_name)
+
+            await db.commit()
+
+        # Send feedback to the user
+        added_message = (
+            f"Added movies:\n"
+            + "\n".join(f"[{name}](<{link}>)" for name, link in added_movies)
+            if added_movies
+            else "No new movies were added."
+        )
+        duplicate_message = (
+            f"Duplicates not added: \n{', '.join(duplicate_movies)}"
+            if duplicate_movies
+            else ""
+        )
+        await interaction.response.send_message(f"{added_message}\n{duplicate_message}")
+
+    @app_commands.command(name="list_movies")
+    async def list_movies(self, interaction: discord.Interaction):
+        """List all movies in the database for the server."""
+        guild_id = interaction.guild.id
+        db_name = self.get_db_name(guild_id)
+
+        async with aiosqlite.connect(db_name) as db:
+            async with db.execute("SELECT name, link FROM movies") as cursor:
+                movies = await cursor.fetchall()
+                if not movies:
+                    await interaction.response.send_message(
+                        "No movies found in the database."
+                    )
+                    return
+                # Format each movie as a hyperlink
+        movie_list = "\n".join(f"[{name}](<{link}>)" for name, link in movies)
+        print(movie_list)
+        await interaction.response.send_message(f"List of movies:\n{movie_list}")
+
+    @app_commands.command(name="remove_movie")
+    async def remove_movie(
+        self, interaction: discord.Interaction, movie_identifier: str
+    ):
+        """Remove a movie from the database for the server by title or link."""
+        guild_id = interaction.guild.id
+        db_name = self.get_db_name(guild_id)
+
+        async with aiosqlite.connect(db_name) as db:
+            # Convert the identifier to lower case for case-insensitive comparison
+            lower_identifier = movie_identifier.lower()
+
+            # Try to find the movie by title (case-insensitive)
+            cursor = await db.execute(
+                "SELECT id FROM movies WHERE LOWER(name) = ?", (lower_identifier,)
+            )
+            movie = await cursor.fetchone()
+
+            # If not found by title, try to find by link (case-insensitive)
+            if not movie:
+                cursor = await db.execute(
+                    "SELECT id FROM movies WHERE LOWER(link) = ?", (lower_identifier,)
+                )
+                movie = await cursor.fetchone()
+
+            # If a movie was found, remove it
+            if movie:
+                movie_id = movie[0]
+                await db.execute("DELETE FROM movies WHERE id = ?", (movie_id,))
+                await db.commit()
+                await interaction.response.send_message(
+                    f"Removed movie: {movie_identifier}"
+                )
+            else:
+                await interaction.response.send_message(
+                    f"Movie not found: {movie_identifier}"
+                )
+
+    @app_commands.command(name="random_movie")
+    async def random_movie(self, interaction: discord.Interaction):
+        """Choose a random movie from the database for the server and delete it."""
+        guild_id = interaction.guild.id
+        db_name = self.get_db_name(guild_id)
+
+        async with aiosqlite.connect(db_name) as db:
+            # Retrieve both `id`, `name`, and `link` of all movies
+            async with db.execute("SELECT id, name, link FROM movies") as cursor:
+                movies = await cursor.fetchall()
+                if not movies:
+                    await interaction.response.send_message(
+                        "No movies found in the database. Use /add_movie to add some!"
+                    )
+                    return
+
+                # Choose a random movie
+                chosen_movie = random.choice(movies)
+                movie_id, movie_name, movie_link = chosen_movie
+
+                # Delete the chosen movie from the database
+                await db.execute("DELETE FROM movies WHERE id = ?", (movie_id,))
+                await db.commit()
+
+                # Prepare the response with a hyperlink and suppress preview
+                movie_message = f"Random movie: [{movie_name}](<{movie_link}>) (Deleted from database)"
+                await interaction.response.send_message(movie_message)
+
+    async def get_movie_name_from_imdb(self, imdb_url):
+        """Retrieve movie title from IMDb link using tmdbsimple."""
+        # Extract IMDb ID from URL using regex
+        imdb_id_match = re.search(r"tt\d+", imdb_url)
+        if not imdb_id_match:
+            return None  # IMDb ID not found in URL
+
+        imdb_id = imdb_id_match.group()
+        search = tmdb.Find(imdb_id)
+        response = search.info(external_source="imdb_id")
+
+        if response["movie_results"]:
+            return response["movie_results"][0]["title"]
+        return None
 
 
 # Define a simple View that gives us a google link button.
