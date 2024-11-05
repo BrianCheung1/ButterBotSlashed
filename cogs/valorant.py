@@ -27,7 +27,7 @@ class Valorant(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
         self.queue_manager = QueueManager()
-        
+
     @app_commands.command(name="valorantgames")
     @app_commands.describe(
         name="Player's username",
@@ -1688,11 +1688,11 @@ class MatchSelector(discord.ui.Select):
                 [
                     f"{player_name}#{tag}",
                     f"{rank}",
-                    f"{score / total_rounds}",
+                    f"{round(score / total_rounds)}",
                     f"{kills}",
                     f"{deaths}",
                     f"{assists}",
-                    f"{damage/total_rounds}",
+                    f"{round(damage/total_rounds, 2)}",
                     f"{agent}",
                 ]
             )
@@ -1721,11 +1721,11 @@ class MatchSelector(discord.ui.Select):
                 [
                     f"{player_name}#{tag}",
                     f"{rank}",
-                    f"{score / total_rounds}",
+                    f"{round(score / total_rounds)}",
                     f"{kills}",
                     f"{deaths}",
                     f"{assists}",
-                    f"{damage/total_rounds}",
+                    f"{round(damage/total_rounds, 2)}",
                     f"{agent}",
                 ]
             )
@@ -1771,7 +1771,7 @@ class MatchSelector(discord.ui.Select):
         draw.rectangle([(0, 300), (width, 350)], fill=team_b_color)
         draw.text(
             (10, 310),
-            f"{embed2.title} {rounds_won if name in embed2.title else rounds_lost}",
+            f"{embed2.title}",
             font=font_large,
             fill=text_color_white,
         )
@@ -1786,10 +1786,13 @@ class MatchSelector(discord.ui.Select):
         # Function to draw player data rows
         def draw_player_row(y_offset, player_data, team_color):
             x_offset = 10
-            draw.rectangle([(0, y_offset), (width, y_offset + 40)], fill=team_color)
+            draw.rectangle([(0, y_offset), (width, y_offset + 60)], fill=team_color)
+            draw.line(
+                [(0, y_offset + 10), (width, y_offset + 10)], fill=(0, 0, 0), width=2
+            )
             for index, item in enumerate(player_data):
                 draw.text(
-                    (x_offset, y_offset + 10),
+                    (x_offset, y_offset + 20),
                     str(item),
                     font=font_small,
                     fill=text_color_white,

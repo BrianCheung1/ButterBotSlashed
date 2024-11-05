@@ -60,7 +60,7 @@ class General(commands.Cog):
         results = ""
         for index, result in enumerate(search.results):
             view.add_item(MovieButton(index + 1, search.results[index]))
-            results += f'{index+1}. **{result["title"]}**\n'
+            results += f'{index+1}. **{result["title"]}** {result["release_date"]}\n'
             if index >= 4:
                 break
         view.add_item(MovieMenuButton(query, search.results))
@@ -84,7 +84,7 @@ class General(commands.Cog):
 
             # movie_info = tmdb.Movies(movie["id"])
             # response = movie_info.info()
-            result += f'{index+1}. [{movie["title"]}](https://www.themoviedb.org/movie/{movie["id"]}) - Rating: {movie["vote_average"]}\n'
+            result += f'{index+1}. [{movie["title"]}](https://www.themoviedb.org/movie/{movie["id"]}) - Rating: {movie["vote_average"]} - {movie["release_date"]}\n'
         embed.add_field(name="Movies", value=f"{result}")
         await interaction.followup.send(embed=embed)
 
@@ -97,7 +97,7 @@ class General(commands.Cog):
         embed = discord.Embed(title="Popular Movies")
         result = ""
         for index, show in enumerate(search.popular()["results"][0:10]):
-            result += f'{index+1}. [{show["name"]}](https://www.themoviedb.org/tv/{show["id"]}) - Rating: {show["vote_average"]}\n'
+            result += f'{index+1}. [{show["name"]}](https://www.themoviedb.org/tv/{show["id"]}) - Rating: {show["vote_average"]} - {show["first_air_date"]}\n'
         embed.add_field(name="Movies", value=f"{result}")
         await interaction.followup.send(embed=embed)
 
@@ -223,7 +223,7 @@ class MovieMenuButton(discord.ui.Button):
         embed = discord.Embed()
         results = ""
         for index, result in enumerate(self.results):
-            results += f'{index+1}. **{result["title"]}**\n'
+            results += f'{index+1}. **{result["title"]}** {result["release_date"]}\n'
             if index >= 4:
                 break
         embed.add_field(name=f"Results for {self.query.title()}", value=results)
@@ -299,7 +299,7 @@ class TVMenuButton(discord.ui.Button):
         embed = discord.Embed()
         results = ""
         for index, result in enumerate(self.results):
-            results += f'{index+1}. **{result["original_name"]}**\n'
+            results += f'{index+1}. **{result["original_name"]}** {result["first_release_date"]}\n'
             if index >= 4:
                 break
         embed.add_field(name=f"Results for {self.query.title()}", value=results)
