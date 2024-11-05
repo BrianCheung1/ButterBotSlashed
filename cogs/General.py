@@ -161,6 +161,35 @@ class General(commands.Cog):
         await interaction.followup.send(embed=embed)
 
     @app_commands.command(
+        name="trending_tv_shows",
+        description="Shows the top 10 trending TV shows this week",
+    )
+    async def trending_tv_shows(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        try:
+            # Fetch the trending TV shows for the week using tmdbsimple
+            trending = tmdb.Trending(media_type="tv")
+            results = trending.info()
+
+            if not results["results"]:
+                await interaction.followup.send("No trending TV shows found.")
+                return
+
+            # Prepare the embed message
+            embed = discord.Embed(title="Trending TV Shows This Week")
+            result = ""
+            for index, tv_show in enumerate(results["results"][:10]):
+                result += f'{index+1}. [{tv_show["name"]}](https://www.themoviedb.org/tv/{tv_show["id"]}) - Rating: {tv_show["vote_average"]} - {tv_show["first_air_date"]}\n'
+
+            embed.add_field(name="TV Shows", value=f"{result}")
+            await interaction.followup.send(embed=embed)
+
+        except Exception as e:
+            await interaction.followup.send(
+                f"An error occurred while fetching the trending TV shows: {e}"
+            )
+
+    @app_commands.command(
         name="tv_show", description="Shows information about a tv show"
     )
     @app_commands.describe(query="TV show you want to search")
