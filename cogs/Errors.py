@@ -9,6 +9,11 @@ from discord.ext import commands
 from dotenv import load_dotenv
 import discord
 import os
+import logging
+
+# Set up logging for better error tracking
+logging.basicConfig(level=logging.ERROR)
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 list_of_guilds = os.getenv("GUILDS").split(",")
@@ -28,30 +33,37 @@ class Errors(commands.Cog):
     async def on_app_command_error(
         self, interaction: discord.Interaction, error: AppCommandError
     ):
-        print(f"Error running command Interaction: {interaction} Error: {error}")
+        # Log the error for further analysis
+        logger.error(f"Error running command Interaction: {interaction} Error: {error}")
+
         # Check if the interaction has been deferred
         if not interaction.response.is_done():
             await interaction.response.defer()
+
+        # Handle specific error types
         if isinstance(error, CommandNotFound):
             await interaction.followup.send(
-                "No Command Found - Commands may not be synced - Please do /sync",
+                "No Command Found - Commands may not be synced. Please try using `/sync`.",
                 ephemeral=True,
             )
         elif isinstance(error, MissingPermissions):
             await interaction.followup.send(
-                f"Missing Permissions - Permissions need {error.missing_permissions}",
+                f"Missing Permissions - You need the following permissions: {', '.join(error.missing_permissions)}.",
                 ephemeral=True,
             )
         elif isinstance(error, CommandOnCooldown):
             await interaction.followup.send(
-                "Command on cooldown, Retry in {:.2f}s".format(error.retry_after),
+                f"Command on cooldown. Please try again in {error.retry_after:.2f} seconds.",
                 ephemeral=True,
             )
         else:
+            # Generic error message
             await interaction.followup.send(
-                f"Something went wrong {interaction} {error}", ephemeral=True
+                "Something went wrong while processing your request. Please try again later.",
+                ephemeral=True,
             )
-            print(error)
+            # Log the detailed error for debugging
+            logger.error(f"Unexpected error: {error}")
 
 
 async def setup(bot: commands.Bot) -> None:

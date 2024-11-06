@@ -120,6 +120,34 @@ class General(commands.Cog):
         await interaction.followup.send(embed=embed)
 
     @app_commands.command(
+        name="trending_movies", description="Shows the top 10 trending movies this week"
+    )
+    async def trending_movies(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        try:
+            # Fetch the trending movies for the week using tmdbsimple
+            trending = tmdb.Trending()
+            results = trending.info()
+
+            if not results["results"]:
+                await interaction.followup.send("No trending movies found.")
+                return
+
+            # Prepare the embed message
+            embed = discord.Embed(title="Trending Movies This Week")
+            result = ""
+            for index, movie in enumerate(results["results"][:10]):
+                result += f'{index+1}. [{movie["title"]}](https://www.themoviedb.org/movie/{movie["id"]}) - Rating: {movie["vote_average"]} - {movie["release_date"]}\n'
+
+            embed.add_field(name="Movies", value=f"{result}")
+            await interaction.followup.send(embed=embed)
+
+        except Exception as e:
+            await interaction.followup.send(
+                f"An error occurred while fetching the trending movies: {e}"
+            )
+
+    @app_commands.command(
         name="popular_shows", description="Shows the top 10 popular shows"
     )
     async def popular_shows(self, interaction: discord.Interaction):
