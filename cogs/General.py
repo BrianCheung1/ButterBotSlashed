@@ -283,10 +283,13 @@ class General(commands.Cog):
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="add_movies")
+    @app_commands.describe(
+        movie_links="Enter one or more IMDb movie links or movie names, separated by commas. Example: https://www.imdb.com/title/tt0111161/, The Godfather"
+    )
     async def add_movies(self, interaction: discord.Interaction, movie_links: str):
         """
-        Add one or multiple movies to the database using IMDb links.
-        Use commas to separate multiple movie links.
+        Add one or multiple movies to the database using IMDb links or TMDb movie names.
+        Use commas to separate multiple movie links or names.
         """
         guild_id = interaction.guild.id
         await self.create_table()  # Ensure the table exists for the guild
@@ -299,17 +302,34 @@ class General(commands.Cog):
             added_movies = []
             duplicate_movies = []
 
-            for link in link_list:
-                movie_name = await self.get_movie_name_from_imdb(link)
-                if not movie_name:
-                    continue  # Skip if movie name couldn't be retrieved
+            for entry in link_list:
+                # Check if entry is an IMDb link
+                if re.match(r"^https?://(www\.)?imdb\.com/title/tt\d+/", entry):
+                    movie_name = await self.get_movie_name_from_imdb(entry)
+                    movie_link = entry
+                else:
+                    # Use tmdbsimple to search for the movie by name
+                    search = tmdb.Search()
+                    response = search.movie(query=entry)
+                    if response["results"]:
+                        movie = response["results"][0]  # Take the first result
+                        movie_name = movie["title"]
+                        movie_link = f"https://www.themoviedb.org/movie/{movie['id']}"
+                    else:
+                        await interaction.response.send_message(
+                            f"Movie not found: {entry}"
+                        )
+                        continue  # Skip if movie couldn't be found
 
+                # Attempt to add the movie to the database
                 try:
                     await db.execute(
                         "INSERT INTO movies (name, link) VALUES (?, ?)",
-                        (movie_name, link),
+                        (movie_name, movie_link),
                     )
-                    added_movies.append((movie_name, link))  # Store both name and link
+                    added_movies.append(
+                        (movie_name, movie_link)
+                    )  # Store both name and link
                 except aiosqlite.IntegrityError:
                     duplicate_movies.append(movie_name)
 
@@ -330,9 +350,16 @@ class General(commands.Cog):
         await interaction.response.send_message(f"{added_message}\n{duplicate_message}")
 
     @app_commands.command(name="list_movies")
-    async def list_movies(self, interaction: discord.Interaction):
-        """List all movies in the database for the server."""
-        guild_id = interaction.guild.id
+    @app_commands.describe(
+        guild_id="Optional guild ID to list movies from a specific guild."
+    )
+    async def list_movies(self, interaction: discord.Interaction, guild_id: str = None):
+        """List all movies in the database for the server or a specific guild."""
+
+        # If no guild_id is provided, use the current guild's ID
+        if guild_id is None:
+            guild_id = interaction.guild.id
+
         db_name = self.get_db_name(guild_id)
 
         async with aiosqlite.connect(db_name) as db:
@@ -340,15 +367,31 @@ class General(commands.Cog):
                 movies = await cursor.fetchall()
                 if not movies:
                     await interaction.response.send_message(
-                        "No movies found in the database."
+                        f"No movies found in the database for guild ID {guild_id}."
                     )
                     return
-                # Format each movie as a hyperlink
-        movie_list = "\n".join(f"[{name}](<{link}>)" for name, link in movies)
-        print(movie_list)
-        await interaction.response.send_message(f"List of movies:\n{movie_list}")
+
+                # Divide movies into chunks of 10 and add index numbers
+                chunks = [movies[i : i + 10] for i in range(0, len(movies), 10)]
+                await interaction.response.send_message(
+                    f"List of movies in guild {guild_id}:"
+                )
+
+                movie_index = 1  # Start the index counter
+                for chunk in chunks:
+                    # Format each movie with its index number
+                    movie_list = "\n".join(
+                        f"{movie_index + i}. [{name}](<{link}>)"
+                        for i, (name, link) in enumerate(chunk)
+                    )
+                    movie_index += len(chunk)  # Update the index for the next chunk
+
+                    await interaction.channel.send(movie_list)
 
     @app_commands.command(name="remove_movie")
+    @app_commands.describe(
+        movie_identifier="Enter movie link or name of movie,Example: https://www.imdb.com/title/tt0111161/ or The Shawshank Redemption"
+    )
     async def remove_movie(
         self, interaction: discord.Interaction, movie_identifier: str
     ):
@@ -362,25 +405,29 @@ class General(commands.Cog):
 
             # Try to find the movie by title (case-insensitive)
             cursor = await db.execute(
-                "SELECT id FROM movies WHERE LOWER(name) = ?", (lower_identifier,)
+                "SELECT id, link, name FROM movies WHERE LOWER(name) = ?",
+                (lower_identifier,),
             )
             movie = await cursor.fetchone()
 
             # If not found by title, try to find by link (case-insensitive)
             if not movie:
                 cursor = await db.execute(
-                    "SELECT id FROM movies WHERE LOWER(link) = ?", (lower_identifier,)
+                    "SELECT id, link, name FROM movies WHERE LOWER(link) = ?",
+                    (lower_identifier,),
                 )
                 movie = await cursor.fetchone()
 
             # If a movie was found, remove it
             if movie:
-                movie_id = movie[0]
+                movie_id, movie_link, name = movie
                 await db.execute("DELETE FROM movies WHERE id = ?", (movie_id,))
                 await db.commit()
-                await interaction.response.send_message(
-                    f"Removed movie: {movie_identifier}"
-                )
+
+                # Format movie identifier as a hyperlink if link is available
+                link_text = f"[{name}](<{movie_link}>)"
+
+                await interaction.response.send_message(f"Removed movie: {link_text}")
             else:
                 await interaction.response.send_message(
                     f"Movie not found: {movie_identifier}"
@@ -413,6 +460,26 @@ class General(commands.Cog):
                 # Prepare the response with a hyperlink and suppress preview
                 movie_message = f"Random movie: [{movie_name}](<{movie_link}>) (Deleted from database)"
                 await interaction.response.send_message(movie_message)
+
+    @app_commands.command(name="list_databases")
+    async def list_databases(self, interaction: discord.Interaction):
+        """List all available movie databases and allow the user to select one."""
+        # Fetch full guild objects for each guild ID in MY_GUILDS
+        guild_list = []
+        for guild_id in list_of_guilds:
+            guild = self.bot.get_guild(int(guild_id))
+            if guild:
+                guild_list.append(f"{guild.name}\n`{guild.id}`")
+            else:
+                guild_list.append(f"(Unknown Guild)\n`{guild_id}`")
+
+        guild_list_text = "\n".join(guild_list)
+
+        # Send the list to the user
+        await interaction.response.send_message(
+            f"Available movie databases:\n{guild_list_text}\n\n"
+            "Please use `/list_movies <guild_id>` to list movies for a specific database."
+        )
 
     async def get_movie_name_from_imdb(self, imdb_url):
         """Retrieve movie title from IMDb link using tmdbsimple."""
