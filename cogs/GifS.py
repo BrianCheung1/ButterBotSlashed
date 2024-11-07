@@ -10,8 +10,7 @@ import random
 
 load_dotenv()
 KEY = os.getenv("TENOR_TOKEN")
-list_of_guilds = os.getenv("GUILDS").split(",")
-MY_GUILDS = [discord.Object(id=int(guild)) for guild in list_of_guilds]
+
 
 
 class Gifs(commands.Cog):
@@ -88,5 +87,5 @@ class Counter(discord.ui.View):
 
 
 async def setup(bot: commands.Bot) -> None:
-    await bot.add_cog(Gifs(bot), guilds=MY_GUILDS)
+    await bot.add_cog(Gifs(bot))
     print("Gifs is Loaded")

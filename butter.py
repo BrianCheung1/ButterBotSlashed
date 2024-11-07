@@ -5,11 +5,14 @@ from pyfiglet import figlet_format
 import discord
 import os
 
-# will first look for a .env file and if it finds one, it will load the environment variables from the file
-# and make them accessible to your project
+# Load environment variables from .env file
 load_dotenv()
 TOKEN = os.getenv("TOKEN")
 CLIENT_ID = os.getenv("ID")
+
+# Ensure TOKEN and CLIENT_ID are loaded properly
+if not TOKEN or not CLIENT_ID:
+    raise ValueError("Bot token or client ID not found in environment variables.")
 
 
 class MyBot(commands.Bot):
@@ -22,30 +25,34 @@ class MyBot(commands.Bot):
         )
 
     async def setup_hook(self) -> None:
+        excluded_cogs = []  # Add cog names to exclude if needed
         for filename in os.listdir("./cogs"):
             if filename.endswith(".py"):
-                await self.load_extension(f"cogs.{filename[:-3]}")
-        # global sync
-        # await self.tree.sync()
+                cog_name = filename[:-3]
+                if cog_name not in excluded_cogs:
+                    await self.load_extension(f"cogs.{cog_name}")
+                else:
+                    print(f"Skipping {cog_name}...")
+
+        synced = await self.tree.sync()
+        print(f"Synced {len(synced)} commands globally")
 
     async def on_ready(self):
-
         print("------")
         print(f'\n{figlet_format("ButterBot", "standard")}')
-        print(f'{datetime.now().strftime("Date: %D")}')
-        print(f'{datetime.now().strftime("Time: %I:%M:%S:%p")}')
+        print(f"Date: {datetime.now().strftime('%Y-%m-%d')}")
+        print(f"Time: {datetime.now().strftime('%H:%M:%S')}")
         print(f"Logged in as {self.user} (ID: {self.user.id})")
-        print(f"Ping {round(self.latency*1000)}ms")
+        print(f"Ping: {round(self.latency * 1000)} ms")
         print("------")
 
 
-bot = MyBot()
-bot.start_time = datetime.now()
-# @bot.tree.error
-# async def on_app_command_error(
-#     interaction: Interaction,
-#     error: AppCommandError
-# ):
-#     await interaction.response.send_message(error)
-
-bot.run(TOKEN)
+# Initialize and run the bot with error handling
+try:
+    bot = MyBot()
+    bot.start_time = datetime.now()
+    bot.run(TOKEN)
+except discord.LoginFailure:
+    print("Invalid token provided. Please check your .env file.")
+except Exception as e:
+    print(f"An error occurred: {e}")

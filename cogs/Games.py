@@ -15,8 +15,6 @@ from utils.stats import balance_of_player, gamble_stats, blackjack_stats, slots_
 
 load_dotenv()
 GAMES = os.getenv("GAMES")
-list_of_guilds = os.getenv("GUILDS").split(",")
-MY_GUILDS = [discord.Object(id=int(guild)) for guild in list_of_guilds]
 MONGO_URL = os.getenv("ATLAS_URI")
 cluster = MongoClient(MONGO_URL)
 db = cluster["Users"]
@@ -1073,5 +1071,5 @@ def slots_helper(
 
 
 async def setup(bot: commands.Bot) -> None:
-    await bot.add_cog(Games(bot), guilds=MY_GUILDS)
+    await bot.add_cog(Games(bot))
     print("Games is Loaded")

@@ -16,8 +16,6 @@ from urllib.parse import urljoin
 from PIL import Image, ImageDraw, ImageFont
 
 load_dotenv()
-list_of_guilds = os.getenv("GUILDS").split(",")
-MY_GUILDS = [discord.Object(id=int(guild)) for guild in list_of_guilds]
 VAL_KEY = os.getenv("VAL")
 
 
@@ -1822,5 +1820,5 @@ class MatchSelector(discord.ui.Select):
 
 
 async def setup(bot: commands.Bot) -> None:
-    await bot.add_cog(Valorant(bot), guilds=MY_GUILDS)
+    await bot.add_cog(Valorant(bot))
     print("Valorant is Loaded")

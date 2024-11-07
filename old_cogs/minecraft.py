@@ -10,8 +10,6 @@ import subprocess
 
 load_dotenv()
 IP = os.getenv("IP")
-list_of_guilds = os.getenv("GUILDS").split(",")
-MY_GUILDS = [discord.Object(id=int(guild)) for guild in list_of_guilds]
 SERVER_DIRECTORY = os.getenv("SERVER_DIRECTORY")
 
 
@@ -65,7 +63,6 @@ class Minecraft(commands.Cog):
             )
             await interaction.response.send_message(embed=embed)
 
-
     @app_commands.command(name="start", description="Starts the minecraft server")
     async def start(self, interaction: discord.Interaction):
         # os.chdir(os.getenv("SERVER_DIRECTORY"))
@@ -79,6 +76,6 @@ class Minecraft(commands.Cog):
         )
 
 
-async def setup(bot: commands.Bot) -> None:
-    await bot.add_cog(Minecraft(bot), guilds=MY_GUILDS)
-    print("Minecraft is Loaded")
+# async def setup(bot: commands.Bot) -> None:
+#     await bot.add_cog(Minecraft(bot))
+#     print("Minecraft is Loaded")

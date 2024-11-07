@@ -8,11 +8,6 @@ import os
 import random
 
 
-load_dotenv()
-list_of_guilds = os.getenv("GUILDS").split(",")
-MY_GUILDS = [discord.Object(id=int(guild)) for guild in list_of_guilds]
-
-
 class Moderation(commands.Cog):
     """Moderation Features"""
 
@@ -121,5 +116,5 @@ class SelfRoleButton(discord.ui.View):
 
 
 async def setup(bot: commands.Bot) -> None:
-    await bot.add_cog(Moderation(bot), guilds=MY_GUILDS)
+    await bot.add_cog(Moderation(bot))
     print("Moderation is Loaded")

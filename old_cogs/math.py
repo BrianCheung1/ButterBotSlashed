@@ -4,13 +4,6 @@ from math import sqrt
 from typing import Literal, Optional
 import discord
 
-import os
-from dotenv import load_dotenv
-
-load_dotenv
-list_of_guilds = os.getenv("GUILDS").split(",")
-MY_GUILDS = [discord.Object(id=int(guild)) for guild in list_of_guilds]
-
 
 class Math(commands.Cog):
     """Math Functions"""
@@ -52,6 +45,6 @@ class Math(commands.Cog):
         await interaction.response.send_message(answer_response)
 
 
-async def setup(bot: commands.Bot) -> None:
-    await bot.add_cog(Math(bot), guilds=MY_GUILDS)
-    print("Math is Loaded")
+# async def setup(bot: commands.Bot) -> None:
+#     await bot.add_cog(Math(bot))
+#     print("Math is Loaded")

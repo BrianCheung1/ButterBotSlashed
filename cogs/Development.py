@@ -1,17 +1,12 @@
 from datetime import datetime
 from discord import app_commands
 from discord.ext import commands, tasks
-from dotenv import load_dotenv
 from typing import Literal, Optional
 import discord
 import os
 import platform
 import random
-
-
-load_dotenv()
-list_of_guilds = os.getenv("GUILDS").split(",")
-MY_GUILDS = [discord.Object(id=int(guild)) for guild in list_of_guilds]
+import asyncio
 
 
 class Development(commands.Cog):
@@ -45,14 +40,20 @@ class Development(commands.Cog):
     ):
         """Reload Cogs"""
         await interaction.response.defer()
-        if not cog:
-            for filename in os.listdir("./cogs"):
-                if filename.endswith(".py"):
-                    await self.bot.reload_extension(f"cogs.{filename[:-3]}")
-            await interaction.followup.send("Cogs Reloaded", ephemeral=True)
-        else:
+
+        if cog:
             await self.bot.reload_extension(f"cogs.{cog}")
             await interaction.followup.send(f"{cog.title()} Reloaded", ephemeral=True)
+        else:
+            cogs = [
+                filename[:-3]
+                for filename in os.listdir("./cogs")
+                if filename.endswith(".py")
+            ]
+            await asyncio.gather(
+                *[self.bot.reload_extension(f"cogs.{cog}") for cog in cogs]
+            )
+            await interaction.followup.send("Cogs Reloaded", ephemeral=True)
 
     @commands.Cog.listener()
     async def on_message(self, message):
@@ -79,44 +80,40 @@ class Development(commands.Cog):
         interaction: discord.Interaction,
         server: Optional[Literal["This Server", "All Servers"]] = None,
     ):
-        """Syncs commands to all servers"""
-        # loops through the servers of the bot
-        # reloading the cogs for each server
-        # sync the commands for each guild
+        """Syncs commands to all servers and lists synced command names."""
         await interaction.response.defer()
+
         if server == "All Servers":
-            for filename in os.listdir(f"./cogs"):
-                if filename.endswith(".py"):
-                    await self.bot.reload_extension(f"cogs.{filename[:-3]}")
-            for guild in MY_GUILDS:
-                synced = await self.bot.tree.sync(guild=guild)
+            # Re-sync the current commands globally
+            synced = await self.bot.tree.sync()
+            command_list = "\n".join([f"- `{cmd.name}`" for cmd in synced])
             await interaction.followup.send(
-                f"Synced {len(synced)} commands globally to {len(MY_GUILDS)} guilds"
+                f"Synced {len(synced)} commands globally"
             )
         else:
-            for filename in os.listdir(f"./cogs"):
-                if filename.endswith(".py"):
-                    await self.bot.reload_extension(f"cogs.{filename[:-3]}")
-            await self.bot.tree.sync(guild=discord.Object(int(interaction.guild.id)))
-            await interaction.followup.send(f"{interaction.guild.name} synced")
+            # Re-sync the current commands in the guild
+            synced = await self.bot.tree.sync(guild=guild)
+            command_list = "\n".join([f"- `{cmd.name}`" for cmd in synced])
+            await interaction.followup.send(
+                f"Synced commands to {guild.name}"
+            )
 
     @app_commands.command(name="stats", description="show stats of the bot")
     async def stats(self, interaction: discord.Interaction):
 
-        guild_count = 0
-        user_count = 0
-        cog_count = 0
-        slash_command_count = 0
-        for guild in self.bot.guilds:
-            guild_count += 1
-            user_count += guild.member_count
+        guild_count = len(self.bot.guilds)
+        user_count = sum(guild.member_count for guild in self.bot.guilds)
+        cog_count = len(
+            [filename for filename in os.listdir("cogs/") if filename.endswith(".py")]
+        )
+        slash_command_count = len(self.bot.tree.get_commands())
 
-        for filename in os.listdir("cogs/"):
-            if filename.endswith(".py"):
-                cog_count += 1
-
-        for command in self.bot.tree.get_commands(guild=interaction.guild):
-            slash_command_count += 1
+        # Format uptime
+        uptime = datetime.now() - self.bot.start_time
+        days, remainder = divmod(int(uptime.total_seconds()), 86400)
+        hours, remainder = divmod(remainder, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        duration_formatted = f"{days}D:{hours}H:{minutes}M"
 
         embed = discord.Embed(title=f"{self.bot.user.display_name} stats")
         embed.add_field(
@@ -130,8 +127,14 @@ class Development(commands.Cog):
         minutes, seconds = divmod(remainder, 60)
         days, hours = divmod(hours, 24)
         duration_formatted = f"{days}D:{hours}H:{minutes}M"
-        embed.add_field(name="Uptime", value=f"{duration_formatted}", inline=True)
 
+        embed = discord.Embed(title=f"{self.bot.user.display_name} stats")
+        embed.add_field(
+            name="Ping", value=f"{round(self.bot.latency*1000)}ms", inline=True
+        )
+        embed.add_field(name="Total Servers", value=f"{guild_count}", inline=True)
+        embed.add_field(name="Total Members", value=f"{user_count}", inline=True)
+        embed.add_field(name="Uptime", value=f"{duration_formatted}", inline=True)
         embed.add_field(
             name="Discord.py Version", value=f"{discord.__version__}", inline=True
         )
@@ -140,7 +143,7 @@ class Development(commands.Cog):
         )
         embed.add_field(name="Total Cogs", value=f"{cog_count}", inline=True)
         embed.add_field(
-            name="Total Slash Comamnds", value=f"{slash_command_count}", inline=True
+            name="Total Slash Commands", value=f"{slash_command_count}", inline=True
         )
         embed.set_thumbnail(url=self.bot.user.display_avatar)
         embed.timestamp = datetime.now()

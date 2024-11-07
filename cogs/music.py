@@ -9,10 +9,6 @@ import os
 import asyncio
 import youtube_dl
 
-load_dotenv()
-list_of_guilds = os.getenv("GUILDS").split(",")
-MY_GUILDS = [discord.Object(id=int(guild)) for guild in list_of_guilds]
-
 
 youtube_dl.utils.bug_reports_message = lambda: ""
 
@@ -187,5 +183,5 @@ class Music(commands.Cog):
 
 
 async def setup(bot: commands.Bot) -> None:
-    await bot.add_cog(Music(bot), guilds=MY_GUILDS)
+    await bot.add_cog(Music(bot))
     print("Music is Loaded")

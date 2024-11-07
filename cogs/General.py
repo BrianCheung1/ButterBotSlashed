@@ -15,11 +15,8 @@ import aiosqlite
 import random
 import re
 
-tmdb.API_KEY = os.getenv("TMDB")
-
 load_dotenv()
-list_of_guilds = os.getenv("GUILDS").split(",")
-MY_GUILDS = [discord.Object(id=int(guild)) for guild in list_of_guilds]
+tmdb.API_KEY = os.getenv("TMDB")
 
 
 class General(commands.Cog):
@@ -42,7 +39,7 @@ class General(commands.Cog):
 
     async def create_table(self):
         """Ensure the movies table exists for the specified guild."""
-        for guild in MY_GUILDS:
+        for guild in self.bot.guilds:
             db_name = self.get_db_name(guild.id)
             async with aiosqlite.connect(db_name) as db:
                 await db.execute(
@@ -61,7 +58,7 @@ class General(commands.Cog):
         """Invite me to your discord server"""
         button = Button(
             label="Invite",
-            url=f"https://discord.com/api/oauth2/authorize?client_id={self.bot.user.id}&permissions=8&scope=bot",
+            url=f"https://discord.com/oauth2/authorize?client_id=734971561878093844",
             style=ButtonStyle.url,
         )
         view = View()
@@ -466,12 +463,11 @@ class General(commands.Cog):
         """List all available movie databases and allow the user to select one."""
         # Fetch full guild objects for each guild ID in MY_GUILDS
         guild_list = []
-        for guild_id in list_of_guilds:
-            guild = self.bot.get_guild(int(guild_id))
+        for guild in self.bot.guilds:
             if guild:
                 guild_list.append(f"{guild.name}\n`{guild.id}`")
             else:
-                guild_list.append(f"(Unknown Guild)\n`{guild_id}`")
+                guild_list.append(f"(Unknown Guild)\n`{guild.id}`")
 
         guild_list_text = "\n".join(guild_list)
 
@@ -742,5 +738,5 @@ def convert(time):
 
 
 async def setup(bot: commands.Bot) -> None:
-    await bot.add_cog(General(bot), guilds=MY_GUILDS)
+    await bot.add_cog(General(bot))
     print("General is Loaded")

@@ -10,8 +10,6 @@ import os
 from utils.stats import balance_of_player
 
 load_dotenv()
-list_of_guilds = os.getenv("GUILDS").split(",")
-MY_GUILDS = [discord.Object(id=int(guild)) for guild in list_of_guilds]
 GAMES = os.getenv("GAMES")
 MONGO_URL = os.getenv("ATLAS_URI")
 cluster = MongoClient(MONGO_URL)
@@ -139,5 +137,5 @@ class Profile(commands.Cog):
 
 
 async def setup(bot: commands.Bot) -> None:
-    await bot.add_cog(Profile(bot), guilds=MY_GUILDS)
+    await bot.add_cog(Profile(bot))
     print("Profile is Loaded")
