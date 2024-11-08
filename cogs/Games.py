@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 from pymongo import MongoClient
 
 from utils.stats import (balance_of_player, blackjack_stats, gamble_stats,
-                         slots_stats)
+                         slots_stats, wordle_stats)
 
 load_dotenv()
 GAMES = os.getenv("GAMES")
@@ -79,15 +79,32 @@ class Games(commands.Cog):
         feedback = game.check_guess(guess)
         game.attempts += 1
         game.current_guess = guess
-
+        wordles_won, wordles_lost, wordles_played = wordle_stats(interaction.user)
         if guess == game.target_word:
             await interaction.response.send_message(
                 f"Congratulations! You guessed the word **{game.target_word}** in {game.attempts} attempts!"
             )
+
+            collection.update_one(
+                {"_id": interaction.user.id}, {"$set": {"wordles_won": wordles_won + 1}}
+            )
+            collection.update_one(
+                {"_id": interaction.user.id},
+                {"$set": {"wordles_played": wordles_played + 1}},
+            )
+
             del self.games[user_id]  # Remove the game after a win
         elif game.attempts >= game.max_attempts:
             await interaction.response.send_message(
                 f"Game Over! The word was **{game.target_word}**. Better luck next time!"
+            )
+            collection.update_one(
+                {"_id": interaction.user.id},
+                {"$set": {"wordles_played": wordles_played + 1}},
+            )
+            collection.update_one(
+                {"_id": interaction.user.id},
+                {"$set": {"wordles_lost": wordles_lost + 1}},
             )
             del self.games[user_id]  # Remove the game after losing
         else:
