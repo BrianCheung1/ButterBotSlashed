@@ -4,6 +4,7 @@ from discord.app_commands import (
     MissingPermissions,
     CommandNotFound,
     CommandOnCooldown,
+    CheckFailure,
 )
 from discord.ext import commands
 from dotenv import load_dotenv
@@ -21,6 +22,7 @@ class Errors(commands.Cog):
         bot.tree.on_error = self.on_app_command_error
 
     # the global error handler for all app commands (slash & ctx menus)
+    @commands.Cog.listener()
     async def on_app_command_error(
         self, interaction: discord.Interaction, error: AppCommandError
     ):
@@ -66,6 +68,21 @@ class Errors(commands.Cog):
                     "I do not have permission to perform this action.",
                     ephemeral=True,
                 )
+            elif isinstance(error, CheckFailure):
+                await interaction.followup.send(
+                    "Only owner for this bot can use this command.",
+                    ephemeral=True,
+                )
+            elif isinstance(error, BadUnionArgument):
+                await interaction.followup.send(
+                    "One or more arguments couldn't be processed correctly. Please check your input.",
+                    ephemeral=True,
+                )
+            elif isinstance(error, ArgumentParsingError):
+                await interaction.followup.send(
+                    "There was an error parsing your command arguments. Please check the command syntax.",
+                    ephemeral=True,
+                )
             else:
                 # Generic error message
                 await interaction.followup.send(
@@ -89,7 +106,7 @@ class Errors(commands.Cog):
                     # Send the error details to the support channel
                     await target_channel.send(
                         f"Error occurred in {interaction.guild.name} ({interaction.guild.id}):\n"
-                        f"Command: `/{interaction.command.name}` triggered by {interaction.user.name} ({interaction.user.id})\n"
+                        # f"Command: `/{interaction.command.name}` triggered by {interaction.user.name} ({interaction.user.id})\n"
                         f"Error: {error}"
                     )
                     # Ping the admin user in the support channel for feedback

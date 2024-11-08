@@ -1,8 +1,13 @@
+from discord import app_commands
+from discord.ext import commands
 from dotenv import load_dotenv
 from pymongo import MongoClient
-import os
+from typing import Optional
 import discord
+import os
+import random
 
+load_dotenv()
 MONGO_URL = os.getenv("ATLAS_URI")
 cluster = MongoClient(MONGO_URL)
 db = cluster["Users"]

@@ -17,6 +17,8 @@ import re
 
 load_dotenv()
 tmdb.API_KEY = os.getenv("TMDB")
+# IMDb object to fetch movie data
+# create an instance of the Cinemagoer class
 
 
 class General(commands.Cog):

@@ -16,8 +16,15 @@ class Development(commands.Cog):
         self.bot = bot
         self.my_background_task.start()
 
+    # Custom check to allow only the bot owner
+    def is_owner_check(interaction: discord.Interaction) -> bool:
+        return (
+            interaction.user.id == interaction.client.owner_id
+            or interaction.user.id == 1047615361886982235
+        )
+
     @app_commands.command(name="reload", description="Reload cogs")
-    @app_commands.checks.has_permissions(moderate_members=True)
+    @app_commands.check(is_owner_check)
     async def reload(
         self,
         interaction: discord.Interaction,
@@ -64,8 +71,8 @@ class Development(commands.Cog):
             f'[{str(message.guild).title()}][{str(message.channel).title()}][{datetime.now().strftime("%I:%M:%S:%p")}] {message.author}: {message.content}'
         )
 
-    @app_commands.command(name="ping", description="Shows Bot Latency")
-    async def ping(self, interaction: discord.Interaction):
+    @app_commands.command(name="pong", description="Shows Bot Latency")
+    async def pong(self, interaction: discord.Interaction):
         """Shows Bot Latency"""
 
         await interaction.response.send_message(
@@ -73,7 +80,7 @@ class Development(commands.Cog):
         )
 
     @app_commands.command(name="sync", description="Syncs commands to all servers")
-    @app_commands.checks.has_permissions(moderate_members=True)
+    @app_commands.check(is_owner_check)
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     async def sync(
         self,
@@ -82,25 +89,33 @@ class Development(commands.Cog):
     ):
         """Syncs commands to all servers and lists synced command names."""
         await interaction.response.defer()
-
         if server == "All Servers":
-            # Re-sync the current commands globally
             synced = await self.bot.tree.sync()
-            command_list = "\n".join([f"- `{cmd.name}`" for cmd in synced])
             await interaction.followup.send(
-                f"Synced {len(synced)} commands globally"
+                f"Synced {len(synced)} commands globally to {len(MY_GUILDS)} guilds"
             )
         else:
-            # Re-sync the current commands in the guild
-            synced = await self.bot.tree.sync(guild=guild)
-            command_list = "\n".join([f"- `{cmd.name}`" for cmd in synced])
+            await self.bot.tree.sync(guild=discord.Object(int(interaction.guild.id)))
+            await interaction.followup.send(f"{interaction.guild.name} synced")
+
+    @app_commands.command(
+        name="list_commands", description="Lists all synced commands in this server."
+    )
+    async def list_commands(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+
+        # Get the synced commands for this guild
+        guild_commands = self.bot.tree.get_commands()
+        if guild_commands:
+            command_list = "\n".join([f"- `{cmd.name}`" for cmd in guild_commands])
             await interaction.followup.send(
-                f"Synced commands to {guild.name}"
+                f"Commands in {interaction.guild.name}:\n{command_list}"
             )
+        else:
+            await interaction.followup.send("No commands found for this server.")
 
     @app_commands.command(name="stats", description="show stats of the bot")
     async def stats(self, interaction: discord.Interaction):
-
         guild_count = len(self.bot.guilds)
         user_count = sum(guild.member_count for guild in self.bot.guilds)
         cog_count = len(

@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from pyfiglet import figlet_format
 import discord
 import os
+import asyncio
 
 # Load environment variables from .env file
 load_dotenv()
@@ -33,9 +34,6 @@ class MyBot(commands.Bot):
                     await self.load_extension(f"cogs.{cog_name}")
                 else:
                     print(f"Skipping {cog_name}...")
-
-        synced = await self.tree.sync()
-        print(f"Synced {len(synced)} commands globally")
 
     async def on_ready(self):
         print("------")
