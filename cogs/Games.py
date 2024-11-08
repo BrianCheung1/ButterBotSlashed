@@ -1,17 +1,19 @@
-from bs4 import BeautifulSoup
+import os
+import random
 from datetime import datetime
+from typing import Literal, Optional
+
+import discord
+import requests
+from bs4 import BeautifulSoup
 from discord import app_commands
 from discord.app_commands import Choice
 from discord.ext import commands
 from dotenv import load_dotenv
 from pymongo import MongoClient
-from typing import Optional, Literal
-import discord
-import os
-import random
-import requests
-from utils.stats import balance_of_player, gamble_stats, blackjack_stats, slots_stats
 
+from utils.stats import (balance_of_player, blackjack_stats, gamble_stats,
+                         slots_stats)
 
 load_dotenv()
 GAMES = os.getenv("GAMES")
@@ -31,7 +33,6 @@ class Games(commands.Cog):
         name="games", description="Provide the google sheet links to games"
     )
     async def games(self, interaction: discord.Interaction):
-
         """Provide the google sheet links to games"""
         view = GamesList()
         await interaction.response.send_message(
@@ -87,16 +88,21 @@ class Games(commands.Cog):
                 price = f"~~{original_price}~~\n{discounted_price}"
             else:
                 if soup.select_one('div[class="game_purchase_price price"]'):
-                    price = soup.select_one('div[class="game_purchase_price price"]').contents[
-                        0
-                    ]
+                    price = soup.select_one(
+                        'div[class="game_purchase_price price"]'
+                    ).contents[0]
                 else:
                     price = "N/A"
             reviews = soup.find("meta", itemprop="reviewCount")["content"]
             reviews_description = soup.find("span", itemprop="description").contents[0]
             app_id = soup.find("meta", property="og:url")["content"].split("/")[4]
             build_link = f"https://steamdb.info/app/{app_id}/patchnotes/"
-            embed = discord.Embed(title=f"{add} - {title}", color=0x336EFF, url=steam_link, description=f"[Build {build}]({build_link})" if build else "")
+            embed = discord.Embed(
+                title=f"{add} - {title}",
+                color=0x336EFF,
+                url=steam_link,
+                description=f"[Build {build}]({build_link})" if build else "",
+            )
             embed.add_field(
                 name="Direct Download Link",
                 value=f"[Click Here]({download_link})",
@@ -108,7 +114,9 @@ class Games(commands.Cog):
             embed.add_field(
                 name="Steam Link", value=f"[Click Here]({steam_link})", inline=False
             )
-            embed.add_field(name="Description", value=f"```{description}```", inline=False)
+            embed.add_field(
+                name="Description", value=f"```{description}```", inline=False
+            )
             embed.add_field(name="Notes", value=f"```{notes}```", inline=False)
             embed.add_field(name="Price", value=f"{price}", inline=True)
             embed.add_field(
@@ -118,7 +126,9 @@ class Games(commands.Cog):
             embed.add_field(name="Genres", value=f"{genres}", inline=False)
             embed.set_image(url=image)
             embed.timestamp = datetime.now()
-            embed.set_footer(text=f"{interaction.user}", icon_url=interaction.user.avatar)
+            embed.set_footer(
+                text=f"{interaction.user}", icon_url=interaction.user.avatar
+            )
         except Exception as e:
             print(e)
             return
@@ -797,7 +807,7 @@ class FightButton(discord.ui.View):
                 self.attack.disabled = True
                 self.fight_again.disabled = False
             elif player_health <= 0 and enemy_health <= 0:
-                content = f"it's a tie\n"
+                content = "it's a tie\n"
                 player_health = 0
                 enemy_health = 0
                 self.attack.disabled = True
@@ -959,7 +969,7 @@ def random_card():
 
 
 def fight_helper(interaction: discord.interactions, member: discord.Member):
-    embed = discord.Embed(title=f"Battle Time")
+    embed = discord.Embed(title="Battle Time")
     enemy_health = 100
     player_health = 100
     embed.add_field(

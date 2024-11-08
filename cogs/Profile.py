@@ -1,12 +1,14 @@
+import os
 from datetime import datetime
+from typing import Optional
+
+import discord
 from discord import ButtonStyle, app_commands
 from discord.ext import commands
 from discord.ui import Button, View
 from dotenv import load_dotenv
 from pymongo import MongoClient
-from typing import Optional
-import discord
-import os
+
 from utils.stats import balance_of_player
 
 load_dotenv()

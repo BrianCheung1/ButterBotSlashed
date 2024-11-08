@@ -1,11 +1,9 @@
+from datetime import datetime
+from typing import Optional
+
+import discord
 from discord import app_commands
 from discord.ext import commands
-from dotenv import load_dotenv
-from pymongo import MongoClient
-from typing import Optional
-import discord
-import os
-import random
 
 
 class Moderation(commands.Cog):
@@ -86,9 +84,18 @@ class Moderation(commands.Cog):
     @app_commands.checks.has_permissions(moderate_members=True)
     async def self_role(self, interaction: discord.Interaction, role: discord.Role):
         embed = discord.Embed()
-        embed.add_field(name=f"Role", value=f"{role.mention}")
+        embed.add_field(name="Role", value=f"{role.mention}")
         view = SelfRoleButton(role)
         await interaction.response.send_message(embed=embed, view=view)
+
+    @commands.Cog.listener()
+    async def on_message(self, message):
+        # if the author of a message is a bot stop
+        if message.author.bot:
+            return
+        print(
+            f'[{str(message.guild).title()}][{str(message.channel).title()}][{datetime.now().strftime("%I:%M:%S:%p")}] {message.author}: {message.content}'
+        )
 
 
 class SelfRoleButton(discord.ui.View):

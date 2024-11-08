@@ -1,12 +1,15 @@
-from datetime import datetime
-from discord import app_commands
-from discord.ext import commands, tasks
-from typing import Literal, Optional
-import discord
+import asyncio
 import os
 import platform
 import random
-import asyncio
+from datetime import datetime
+from typing import Literal, Optional
+
+import discord
+from discord import app_commands
+from discord.ext import commands, tasks
+
+GUILD_ID = 152954629993398272
 
 
 class Development(commands.Cog):
@@ -25,6 +28,7 @@ class Development(commands.Cog):
 
     @app_commands.command(name="reload", description="Reload cogs")
     @app_commands.check(is_owner_check)
+    @app_commands.guilds(discord.Object(id=GUILD_ID))
     async def reload(
         self,
         interaction: discord.Interaction,
@@ -62,17 +66,9 @@ class Development(commands.Cog):
             )
             await interaction.followup.send("Cogs Reloaded", ephemeral=True)
 
-    @commands.Cog.listener()
-    async def on_message(self, message):
-        # if the author of a message is a bot stop
-        if message.author.bot:
-            return
-        print(
-            f'[{str(message.guild).title()}][{str(message.channel).title()}][{datetime.now().strftime("%I:%M:%S:%p")}] {message.author}: {message.content}'
-        )
-
-    @app_commands.command(name="pong", description="Shows Bot Latency")
-    async def pong(self, interaction: discord.Interaction):
+    @app_commands.command(name="ping", description="Shows Bot Latency")
+    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    async def ping(self, interaction: discord.Interaction):
         """Shows Bot Latency"""
 
         await interaction.response.send_message(
@@ -82,6 +78,7 @@ class Development(commands.Cog):
     @app_commands.command(name="sync", description="Syncs commands to all servers")
     @app_commands.check(is_owner_check)
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
+    @app_commands.guilds(discord.Object(id=GUILD_ID))
     async def sync(
         self,
         interaction: discord.Interaction,
@@ -92,29 +89,34 @@ class Development(commands.Cog):
         if server == "All Servers":
             synced = await self.bot.tree.sync()
             await interaction.followup.send(
-                f"Synced {len(synced)} commands globally to {len(MY_GUILDS)} guilds"
+                f"Synced {len(synced)} commands globally to {len(self.bot.guilds)} guilds"
             )
         else:
-            await self.bot.tree.sync(guild=discord.Object(int(interaction.guild.id)))
-            await interaction.followup.send(f"{interaction.guild.name} synced")
+            synced = await self.bot.tree.sync(
+                guild=discord.Object(int(interaction.guild.id))
+            )
+            await interaction.followup.send(
+                f"{interaction.guild.name} synced, Synced {len(synced)} commands"
+            )
 
     @app_commands.command(
         name="list_commands", description="Lists all synced commands in this server."
     )
+    @app_commands.guilds(discord.Object(id=GUILD_ID))
     async def list_commands(self, interaction: discord.Interaction):
         await interaction.response.defer()
 
         # Get the synced commands for this guild
-        guild_commands = self.bot.tree.get_commands()
-        if guild_commands:
-            command_list = "\n".join([f"- `{cmd.name}`" for cmd in guild_commands])
-            await interaction.followup.send(
-                f"Commands in {interaction.guild.name}:\n{command_list}"
-            )
-        else:
-            await interaction.followup.send("No commands found for this server.")
+        guild_commands = self.bot.tree.get_commands(guild=discord.Object(id=GUILD_ID))
+        global_commands = self.bot.tree.get_commands()
+        global_command_list = "\n".join([f"- `{cmd.name}`" for cmd in global_commands])
+        guild_command_list = "\n".join([f"- `{cmd.name}`" for cmd in guild_commands])
+        await interaction.followup.send(
+            f"Global Commands:\n{global_command_list}\nGuild Specific Commands:\n{guild_command_list}"
+        )
 
     @app_commands.command(name="stats", description="show stats of the bot")
+    @app_commands.guilds(discord.Object(id=GUILD_ID))
     async def stats(self, interaction: discord.Interaction):
         guild_count = len(self.bot.guilds)
         user_count = sum(guild.member_count for guild in self.bot.guilds)
@@ -191,5 +193,5 @@ class Development(commands.Cog):
 
 
 async def setup(bot: commands.Bot) -> None:
-    await bot.add_cog(Development(bot))
+    await bot.add_cog(Development(bot), guild=discord.Object(id=GUILD_ID))
     print("Development is Loaded")

@@ -1,11 +1,8 @@
-from discord import app_commands
-from discord.ext import commands
+import os
+
+import discord
 from dotenv import load_dotenv
 from pymongo import MongoClient
-from typing import Optional
-import discord
-import os
-import random
 
 load_dotenv()
 MONGO_URL = os.getenv("ATLAS_URI")
@@ -33,6 +30,7 @@ def gamble_stats(member: discord.Member):
             "_id": member.id,
             "balance": 1000,
         }
+        collection.insert_one(post)
     user = collection.find(search)
     for result in user:
         if "gambles_won" and "gambles_lost" and "gambles_played" not in result:
@@ -55,6 +53,7 @@ def blackjack_stats(member: discord.Member):
             "_id": member.id,
             "balance": 1000,
         }
+        collection.insert_one(post)
     user = collection.find(search)
     for result in user:
         if "blackjacks_won" and "blackjacks_lost" and "blackjacks_played" not in result:
@@ -83,6 +82,7 @@ def slots_stats(member: discord.Member):
             "_id": member.id,
             "balance": 1000,
         }
+        collection.insert_one(post)
     user = collection.find(search)
     for result in user:
         if "slots_won" and "slots_lost" and "slots_played" not in result:

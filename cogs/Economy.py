@@ -1,11 +1,12 @@
+import os
+import random
+from typing import Optional
+
+import discord
 from discord import app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
 from pymongo import MongoClient
-from typing import Optional
-import discord
-import os
-import random
 
 from utils.stats import balance_of_player
 
@@ -153,16 +154,6 @@ class LeaderboardButton(discord.ui.View):
         self.pages = pages
         self.count = 0
         self.prev_page.disabled = True
-
-    # this function must return a boolean, or to the very least a truthy/falsey value.
-    # async def interaction_check(self, interaction: discord.Interaction) -> bool:
-
-    #     if self.interaction.user.id != interaction.user.id:
-    #         await interaction.response.send_message(
-    #             "Please start your own game with /slots", ephemeral=True
-    #         )
-    #         return False
-    #     return True
 
     @discord.ui.button(label="Previous Page", style=discord.ButtonStyle.red)
     async def prev_page(

@@ -1,15 +1,11 @@
-from discord import Interaction, NotFound, Forbidden
-from discord.app_commands import (
-    AppCommandError,
-    MissingPermissions,
-    CommandNotFound,
-    CommandOnCooldown,
-    CheckFailure,
-)
-from discord.ext import commands
-from dotenv import load_dotenv
-import discord
 import logging
+
+import discord
+from discord import ArgumentParsingError, BadUnionArgument, Forbidden, NotFound
+from discord.app_commands import (AppCommandError, CheckFailure,
+                                  CommandNotFound, CommandOnCooldown,
+                                  MissingPermissions)
+from discord.ext import commands
 
 # Set up logging for better error tracking
 logging.basicConfig(level=logging.ERROR)
@@ -106,7 +102,7 @@ class Errors(commands.Cog):
                     # Send the error details to the support channel
                     await target_channel.send(
                         f"Error occurred in {interaction.guild.name} ({interaction.guild.id}):\n"
-                        # f"Command: `/{interaction.command.name}` triggered by {interaction.user.name} ({interaction.user.id})\n"
+                        f"Command: `/{interaction.command.name}` triggered by {interaction.user.name} ({interaction.user.id})\n"
                         f"Error: {error}"
                     )
                     # Ping the admin user in the support channel for feedback

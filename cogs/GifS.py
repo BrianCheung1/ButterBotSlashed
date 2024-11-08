@@ -1,16 +1,15 @@
+import json
+import os
+import random
+
+import discord
+import requests
 from discord import app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
-import discord
-import json
-import os
-import requests
-import random
-
 
 load_dotenv()
 KEY = os.getenv("TENOR_TOKEN")
-
 
 
 class Gifs(commands.Cog):

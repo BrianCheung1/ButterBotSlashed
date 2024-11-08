@@ -1,10 +1,10 @@
+import os
 from datetime import datetime
+
+import discord
 from discord.ext import commands
 from dotenv import load_dotenv
 from pyfiglet import figlet_format
-import discord
-import os
-import asyncio
 
 # Load environment variables from .env file
 load_dotenv()

@@ -1,18 +1,14 @@
-from datetime import datetime, timedelta
-from discord import ButtonStyle, app_commands
-from discord.ext import commands
-from discord.ui import Button, View
-from dotenv import load_dotenv
-from typing import Literal, Union, NamedTuple, Optional, List
-from urllib.parse import quote_plus
-import discord
 import os
-import asyncio
-import requests
-from discord.app_commands import Choice
 import uuid
-from bs4 import BeautifulSoup
-from urllib.parse import urljoin
+from datetime import datetime, timedelta
+from typing import List, Optional
+
+import discord
+import requests
+from discord import app_commands
+from discord.app_commands import Choice
+from discord.ext import commands
+from dotenv import load_dotenv
 from PIL import Image, ImageDraw, ImageFont
 
 load_dotenv()
@@ -396,7 +392,6 @@ class Valorant(commands.Cog):
         queue_id: Optional[str] = None,
         members: Optional[str] = None,
     ):
-
         """Create a queue for valorant team of any size"""
         response = ""
         # Generate a unique queue_id using uuid
@@ -407,7 +402,7 @@ class Valorant(commands.Cog):
             if current_queue:
                 response = f"\n\nCurrent Queue:\n{queue_members}"
             else:
-                response = f"\n\nThe queue is currently empty."
+                response = "\n\nThe queue is currently empty."
             if current_queue is None:
                 await interaction.response.send_message(
                     "This queue ID does not exist", ephemeral=True
@@ -448,7 +443,7 @@ class Valorant(commands.Cog):
                             await member.send(
                                 f"{size} R's are ready\nCurrent Queue:\n{queue_members}\n"
                             )
-                        except:
+                        except Exception:
                             print(f"\n{member.mention} could not be Dmed")
 
         # Role Mention
@@ -861,7 +856,9 @@ class QueueButton(discord.ui.View):
             join_button.disabled = True
             join_button.label = "Queue Full"
 
-    @discord.ui.button(label="Join Queue", style=discord.ButtonStyle.primary, emoji="😎")
+    @discord.ui.button(
+        label="Join Queue", style=discord.ButtonStyle.primary, emoji="😎"
+    )
     async def button_callback(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
@@ -906,13 +903,15 @@ class QueueButton(discord.ui.View):
                     await user_dm.send(
                         f"{self.size} R's are ready\nCurrent Queue:\n{queue_members}"
                     )
-                except:
+                except Exception:
                     response += f"\n{user.mention} could not be Dmed"
             await interaction.response.edit_message(content=response, view=self)
         else:
             await interaction.response.edit_message(content=response)
 
-    @discord.ui.button(label="Leave Queue", style=discord.ButtonStyle.danger, emoji="😢")
+    @discord.ui.button(
+        label="Leave Queue", style=discord.ButtonStyle.danger, emoji="😢"
+    )
     async def leave_queue_button(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
@@ -995,7 +994,7 @@ class QueueButton(discord.ui.View):
         if current_queue:
             response = f"\n\nCurrent Queue:\n{queue_members}"
         else:
-            response = f"\n\nThe queue is currently empty."
+            response = "\n\nThe queue is currently empty."
         if current_queue is None:
             await interaction.response.send_message(
                 "This queue ID does not exist", ephemeral=True
@@ -1154,7 +1153,6 @@ class MatchSelector(discord.ui.Select):
             )
             adjusted_date = last_match_date - timedelta(hours=4)
             result_date_str = adjusted_date.strftime("%A, %B %d, %Y %I:%M %p")
-            result_date = datetime.strptime(result_date_str, "%A, %B %d, %Y %I:%M %p")
 
             if isinstance(match_id, str) and match_season == current_season:
                 option = discord.SelectOption(
@@ -1197,13 +1195,13 @@ class MatchSelector(discord.ui.Select):
         )
 
     def get_agent_abilities(self):
-        agent_abilities_api = f"https://valorant-api.com/v1/agents"
+        agent_abilities_api = "https://valorant-api.com/v1/agents"
         agent_abilities_response = requests.get(agent_abilities_api)
         agent_abilities_json = agent_abilities_response.json()
         return agent_abilities_json["data"]
 
     def get_maps(self):
-        maps_api = f"https://valorant-api.com/v1/maps"
+        maps_api = "https://valorant-api.com/v1/maps"
         maps_response = requests.get(maps_api)
         maps_json = maps_response.json()
         return maps_json["data"]
@@ -1741,7 +1739,6 @@ class MatchSelector(discord.ui.Select):
         team_a_color = (24, 100, 79)  # Dark Green
         team_b_color = (91, 22, 22)  # Dark Red
         text_color_white = (255, 255, 255)
-        text_color_black = (0, 0, 0)
 
         draw.rectangle([(0, 0), (width, 50)], fill=team_a_color)
         draw.text(

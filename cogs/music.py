@@ -1,8 +1,9 @@
+import asyncio
+
 import discord
 import yt_dlp as youtube_dl
 from discord import app_commands
 from discord.ext import commands
-import asyncio
 
 
 class YTDLSource:

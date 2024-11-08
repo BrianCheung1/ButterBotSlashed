@@ -1,19 +1,19 @@
+import os
+import random
+import re
 from datetime import datetime
+from typing import Literal
+from urllib.parse import quote_plus
+
+import aiosqlite
+import discord
+import kitsu
+import tmdbsimple as tmdb
 from discord import ButtonStyle, app_commands
 from discord.ext import commands
 from discord.ui import Button, View
 from dotenv import load_dotenv
-from typing import Literal, Union, NamedTuple, Optional, List
-from urllib.parse import quote_plus
-import discord
-import os
-import tmdbsimple as tmdb
 from pytz import timezone
-import kitsu
-import asyncio
-import aiosqlite
-import random
-import re
 
 load_dotenv()
 tmdb.API_KEY = os.getenv("TMDB")
@@ -60,14 +60,14 @@ class General(commands.Cog):
         """Invite me to your discord server"""
         button = Button(
             label="Invite",
-            url=f"https://discord.com/oauth2/authorize?client_id=734971561878093844",
+            url="https://discord.com/oauth2/authorize?client_id=734971561878093844",
             style=ButtonStyle.url,
         )
         view = View()
         view.add_item(button)
 
         embed = discord.Embed()
-        embed.title = f"Click the button below to invite me to your server! \U0001f389"
+        embed.title = "Click the button below to invite me to your server! \U0001f389"
         await interaction.response.send_message(embed=embed, view=view)
 
     @app_commands.command(name="google")
@@ -82,7 +82,6 @@ class General(commands.Cog):
     async def movie(self, interaction: discord.Interaction, query: str):
         await interaction.response.defer()
         search = tmdb.Search()
-        response = search.movie(query=query)
         if not search.results:
             await interaction.followup.send("No results for your query")
         view = discord.ui.View()
@@ -195,7 +194,6 @@ class General(commands.Cog):
     async def tv_show(self, interaction: discord.Interaction, query: str):
         await interaction.response.defer()
         search = tmdb.Search()
-        response = search.tv(query=query)
         if not search.results:
             await interaction.followup.send("No results for your query")
         view = discord.ui.View()
@@ -336,7 +334,7 @@ class General(commands.Cog):
 
         # Send feedback to the user
         added_message = (
-            f"Added movies:\n"
+            "Added movies:\n"
             + "\n".join(f"[{name}](<{link}>)" for name, link in added_movies)
             if added_movies
             else "No new movies were added."
