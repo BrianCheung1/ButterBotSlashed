@@ -1,10 +1,15 @@
 import logging
 
 import discord
-from discord import ArgumentParsingError, BadUnionArgument, Forbidden, NotFound
-from discord.app_commands import (AppCommandError, CheckFailure,
-                                  CommandNotFound, CommandOnCooldown,
-                                  MissingPermissions)
+from discord import Forbidden, NotFound
+from discord.app_commands import (
+    AppCommandError,
+    CheckFailure,
+    CommandNotFound,
+    CommandOnCooldown,
+    MissingPermissions,
+    CommandInvokeError,
+)
 from discord.ext import commands
 
 # Set up logging for better error tracking
@@ -54,6 +59,13 @@ class Errors(commands.Cog):
                     f"Command on cooldown. Please try again in {error.retry_after:.2f} seconds.",
                     ephemeral=True,
                 )
+            elif isinstance(error, CommandInvokeError):
+                original = getattr(error, "original", error)
+                await interaction.followup.send(
+                    "An error occurred while processing your command. Please try again.",
+                    ephemeral=True,
+                )
+                logger.error(f"Original error: {original}")
             elif isinstance(error, NotFound):
                 await interaction.followup.send(
                     "The command or resource was not found.",
@@ -67,16 +79,6 @@ class Errors(commands.Cog):
             elif isinstance(error, CheckFailure):
                 await interaction.followup.send(
                     "Only owner for this bot can use this command.",
-                    ephemeral=True,
-                )
-            elif isinstance(error, BadUnionArgument):
-                await interaction.followup.send(
-                    "One or more arguments couldn't be processed correctly. Please check your input.",
-                    ephemeral=True,
-                )
-            elif isinstance(error, ArgumentParsingError):
-                await interaction.followup.send(
-                    "There was an error parsing your command arguments. Please check the command syntax.",
                     ephemeral=True,
                 )
             else:

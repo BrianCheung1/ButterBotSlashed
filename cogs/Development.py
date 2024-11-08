@@ -2,6 +2,7 @@ import asyncio
 import os
 import platform
 import random
+from collections import defaultdict
 from datetime import datetime
 from typing import Literal, Optional
 
@@ -82,22 +83,13 @@ class Development(commands.Cog):
     async def sync(
         self,
         interaction: discord.Interaction,
-        server: Optional[Literal["This Server", "All Servers"]] = None,
     ):
         """Syncs commands to all servers and lists synced command names."""
         await interaction.response.defer()
-        if server == "All Servers":
-            synced = await self.bot.tree.sync()
-            await interaction.followup.send(
-                f"Synced {len(synced)} commands globally to {len(self.bot.guilds)} guilds"
-            )
-        else:
-            synced = await self.bot.tree.sync(
-                guild=discord.Object(int(interaction.guild.id))
-            )
-            await interaction.followup.send(
-                f"{interaction.guild.name} synced, Synced {len(synced)} commands"
-            )
+        synced = await self.bot.tree.sync()
+        await interaction.followup.send(
+            f"Synced {len(synced)} commands globally to {len(self.bot.guilds)} guilds"
+        )
 
     @app_commands.command(
         name="list_commands", description="Lists all synced commands in this server."
@@ -109,10 +101,37 @@ class Development(commands.Cog):
         # Get the synced commands for this guild
         guild_commands = self.bot.tree.get_commands(guild=discord.Object(id=GUILD_ID))
         global_commands = self.bot.tree.get_commands()
-        global_command_list = "\n".join([f"- `{cmd.name}`" for cmd in global_commands])
-        guild_command_list = "\n".join([f"- `{cmd.name}`" for cmd in guild_commands])
+        # Initialize dictionaries to store commands by cog/module
+        global_commands_by_cog = defaultdict(list)
+        guild_commands_by_cog = defaultdict(list)
+
+        # Organize global commands by cog/module
+        for cmd in global_commands:
+            cog_name = cmd.module or "No Cog"
+            global_commands_by_cog[cog_name].append(cmd.name)
+
+        # Organize guild-specific commands by cog/module
+        for cmd in guild_commands:
+            cog_name = cmd.module or "No Cog"
+            guild_commands_by_cog[cog_name].append(cmd.name)
+
+        # Format the output by cog/module
+        global_command_list = "\n".join(
+            [
+                f"**{cog}**:\n" + "\n".join([f"- `{cmd}`" for cmd in cmds])
+                for cog, cmds in global_commands_by_cog.items()
+            ]
+        )
+        guild_command_list = "\n".join(
+            [
+                f"**{cog}**:\n" + "\n".join([f"- `{cmd}`" for cmd in cmds])
+                for cog, cmds in guild_commands_by_cog.items()
+            ]
+        )
+
+        # Send the organized command lists
         await interaction.followup.send(
-            f"Global Commands:\n{global_command_list}\nGuild Specific Commands:\n{guild_command_list}"
+            f"**Global Commands**:\n{global_command_list}\n\n**Guild-Specific Commands**:\n{guild_command_list}"
         )
 
     @app_commands.command(name="stats", description="show stats of the bot")

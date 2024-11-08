@@ -1809,7 +1809,7 @@ class MatchSelector(discord.ui.Select):
             y_offset += 40
 
         # Specify the image path to save the file
-        image_path = "output_image.png"
+        image_path = "./public/output_image.png"
 
         # Save the image
         image.save(image_path)
