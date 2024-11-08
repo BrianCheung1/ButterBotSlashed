@@ -1,8 +1,9 @@
+from urllib.parse import quote_plus
+
 import discord
-from discord import app_commands, ButtonStyle
+from discord import ButtonStyle, app_commands
 from discord.ext import commands
 from discord.ui import Button, View
-from urllib.parse import quote_plus
 
 
 class General(commands.Cog):
