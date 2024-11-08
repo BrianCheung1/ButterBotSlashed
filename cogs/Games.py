@@ -28,6 +28,73 @@ class Games(commands.Cog):
 
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
+        self.games = {}  # Dictionary to track the games for each user
+
+    @app_commands.command(name="wordle", description="Start a Wordle-like game")
+    async def wordle(self, interaction: discord.Interaction):
+        """Starts a new Wordle-like game for the user."""
+        user_id = interaction.user.id
+
+        # Check if the user is already in a game
+        if user_id in self.games:
+            await interaction.response.send_message(
+                "You are already in an active Wordle game! Try `/guess` to make a guess."
+            )
+            return
+
+        # Start a new game for the user
+        self.games[user_id] = WordleGame()
+        await interaction.response.send_message(
+            "Welcome to Wordle! The game has started. Try to guess the 5-letter word.\n"
+            "You have 6 attempts. After each guess, I will give you feedback:\n"
+            "**Bold Letter** means the letter is correct and in the correct position.\n"
+            "__Underlined__ means the letter is correct but in the wrong position.\n"
+            "Letters with no formatting are incorrect.\n"
+            "`/guess` to make a guess"
+        )
+
+    @app_commands.command(name="guess", description="Make a guess in the Wordle game")
+    async def guess(self, interaction: discord.Interaction, guess: str):
+        """Allows the user to make a guess in their Wordle game."""
+        user_id = interaction.user.id
+
+        # Check if the user is in an active game
+        if user_id not in self.games:
+            await interaction.response.send_message(
+                "You don't have an active game. Type `/wordle` to start a new game."
+            )
+            return
+
+        game = self.games[user_id]
+
+        # Validate the guess
+        guess = guess.lower()
+        if len(guess) != 5 or not guess.isalpha():
+            await interaction.response.send_message(
+                "Please enter a valid 5-letter word."
+            )
+            return
+
+        # Check the guess
+        feedback = game.check_guess(guess)
+        game.attempts += 1
+        game.current_guess = guess
+
+        if guess == game.target_word:
+            await interaction.response.send_message(
+                f"Congratulations! You guessed the word **{game.target_word}** in {game.attempts} attempts!"
+            )
+            del self.games[user_id]  # Remove the game after a win
+        elif game.attempts >= game.max_attempts:
+            await interaction.response.send_message(
+                f"Game Over! The word was **{game.target_word}**. Better luck next time!"
+            )
+            del self.games[user_id]  # Remove the game after losing
+        else:
+            await interaction.response.send_message(
+                f"Attempt {game.attempts}/{game.max_attempts} - Feedback: {feedback}\n"
+                "Try again!"
+            )
 
     @app_commands.command(
         name="games", description="Provide the google sheet links to games"
@@ -1078,6 +1145,58 @@ def slots_helper(
 
     collection.update_one({"_id": interaction.user.id}, {"$set": {"balance": balance}})
     return board2, embed
+
+
+class WordleGame:
+    def __init__(self):
+        # Word list for the game, can be extended with more words
+        self.words = self.get_five_letter_words()
+        self.target_word = random.choice(self.words)
+        self.attempts = 0
+        self.max_attempts = 6
+
+    def get_five_letter_words(self):
+        response = requests.get("https://api.datamuse.com/words?sp=?????")
+        words = [word["word"] for word in response.json()]
+        return words
+
+    def check_guess(self, guess):
+        feedback = [""] * len(guess)  # Feedback array for each letter
+        target_word_marked = [False] * len(
+            self.target_word
+        )  # Tracks matched letters in target word
+
+        # Step 1: First pass for exact matches (Green)
+        for i in range(len(guess)):
+            if guess[i] == self.target_word[i]:
+                feedback[i] = (
+                    f"**{guess[i]}**"  # Green: Correct letter, correct position
+                )
+                target_word_marked[i] = True  # Mark this position as used
+
+        # Step 2: Second pass for correct letters in wrong positions (Yellow)
+        for i in range(len(guess)):
+            if feedback[i]:  # Skip already marked letters
+                continue
+            if guess[i] in self.target_word:
+                # Check if there's an unmatched instance of this letter in target_word
+                for j in range(len(self.target_word)):
+                    if guess[i] == self.target_word[j] and not target_word_marked[j]:
+                        feedback[i] = (
+                            f"__{guess[i]}__"  # Yellow: Correct letter, wrong position
+                        )
+                        target_word_marked[j] = True  # Mark this position as used
+                        break
+            # If no match, mark it as incorrect (gray)
+            if not feedback[i]:
+                feedback[i] = guess[i]
+
+        return " ".join(feedback)  # Return feedback as a string
+
+    def is_game_over(self):
+        return (
+            self.attempts >= self.max_attempts or self.target_word == self.current_guess
+        )
 
 
 async def setup(bot: commands.Bot) -> None:
