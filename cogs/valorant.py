@@ -1185,7 +1185,7 @@ class MatchSelector(discord.ui.Select):
         new_view.timeout = None
 
         # Step 2: Get the Absolute Path (Optional)
-        image_path = "output_image.png"
+        image_path = "public/output_image.png"
         absolute_image_path = os.path.abspath(image_path)
         with open(absolute_image_path, "rb") as f:
             picture = discord.File(f)
