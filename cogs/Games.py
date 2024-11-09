@@ -13,13 +13,8 @@ from discord.ui import Button, View
 from dotenv import load_dotenv
 from pymongo import MongoClient
 
-from utils.stats import (
-    balance_of_player,
-    blackjack_stats,
-    gamble_stats,
-    slots_stats,
-    wordle_stats,
-)
+from utils.stats import (balance_of_player, blackjack_stats, gamble_stats,
+                         slots_stats, wordle_stats)
 
 load_dotenv()
 GAMES = os.getenv("GAMES")
