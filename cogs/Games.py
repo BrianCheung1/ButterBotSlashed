@@ -13,8 +13,13 @@ from discord.ui import Button, View
 from dotenv import load_dotenv
 from pymongo import MongoClient
 
-from utils.stats import (balance_of_player, blackjack_stats, gamble_stats,
-                         slots_stats, wordle_stats)
+from utils.stats import (
+    balance_of_player,
+    blackjack_stats,
+    gamble_stats,
+    slots_stats,
+    wordle_stats,
+)
 
 load_dotenv()
 GAMES = os.getenv("GAMES")
@@ -37,8 +42,13 @@ class Games(commands.Cog):
 
         # Check if the user is already in a game
         if user_id in self.games:
+            print(dir(self.games[user_id].message))
+            original_message_link = (
+                f"https://discord.com/channels/{self.games[user_id].message.guild.id}/"
+                f"{self.games[user_id].message.channel.id}/{self.games[user_id].message.id}"
+            )
             await interaction.response.send_message(
-                "You are already in an active Wordle game! Try `/guess` to make a guess."
+                f"You are already in an active Wordle game! [View your current game]({original_message_link})"
             )
             return
 
@@ -74,7 +84,9 @@ class Games(commands.Cog):
                 return
 
             # Create and send the modal
-            modal = GuessModal(user_id=user_id, game=self.games[user_id])
+            modal = GuessModal(
+                user_id=user_id, game=self.games[user_id], games=self.games
+            )
             await interaction.response.send_modal(modal)
 
         button.callback = on_button_click
@@ -1196,10 +1208,11 @@ class WordleGame:
 
 
 class GuessModal(discord.ui.Modal, title="Guess"):
-    def __init__(self, user_id, game):
-        super().__init__(custom_id="guess_modal")  # Add custom_id here
+    def __init__(self, user_id, game, games):
+        super().__init__(custom_id="guess_modal")
         self.user_id = user_id
         self.game = game
+        self.games = games
 
     feedback = discord.ui.TextInput(
         label="Enter your 5-letter guess",
@@ -1209,7 +1222,8 @@ class GuessModal(discord.ui.Modal, title="Guess"):
     )
 
     async def on_submit(self, interaction: discord.Interaction):
-        guess = self.children[0].value.lower()
+        await interaction.response.defer()
+        guess = self.feedback.value.lower()
 
         # Validate guess
         if len(guess) != 5 or not guess.isalpha():
@@ -1222,115 +1236,93 @@ class GuessModal(discord.ui.Modal, title="Guess"):
         self.game.attempts += 1
         self.game.current_guess = guess
 
+        # Track previous attempts
         if not hasattr(self.game, "previous_attempts"):
             self.game.previous_attempts = []
         self.game.previous_attempts.append((guess, feedback))
-        print(self.game.target_word)
+
+        # Retrieve and update stats
         wordles_won, wordles_lost, wordles_played = wordle_stats(interaction.user)
-        # Check win/lose conditions
-        if guess == self.game.target_word:
-            wordles_won += 1
+        if (
+            guess == self.game.target_word
+            or self.game.attempts >= self.game.max_attempts
+        ):
+            game_over = guess == self.game.target_word
+            wordles_won += int(game_over)
+            wordles_lost += int(not game_over)
             wordles_played += 1
+
             collection.update_one(
                 {"_id": interaction.user.id},
                 {
                     "$set": {
                         "wordles_won": wordles_won,
-                        "wordles_played": wordles_played,
-                    }
-                },
-            )
-            # Game over, the user guessed correctly
-            embed = discord.Embed(
-                title="Wordle Attempt",
-                description=f"Attempt {self.game.attempts}/{self.game.max_attempts}",
-                color=discord.Color.blue(),
-            )
-            embed.add_field(name="Feedback", value=feedback, inline=False)
-            embed.add_field(
-                name="Previous Attempts",
-                value="\n".join(
-                    [
-                        f"{i+1}. {attempt} - {attempt_feedback}"
-                        for i, (attempt, attempt_feedback) in enumerate(
-                            self.game.previous_attempts
-                        )
-                    ]
-                ),
-                inline=False,
-            )
-            embed.set_footer(
-                text=f"{wordles_won} wordles won, {wordles_lost} wordles lost, {wordles_played} wordles played"
-            )
-            await self.game.message.edit(
-                content=f"🎉 You guessed the word {self.game.target_word}!", embed=embed
-            )
-            del self.game  # Delete the game object to end it
-        elif self.game.attempts >= self.game.max_attempts:
-            # Update all user stats in a single database call
-            wordles_lost += 1
-            wordles_played += 1
-            collection.update_one(
-                {"_id": interaction.user.id},
-                {
-                    "$set": {
                         "wordles_lost": wordles_lost,
                         "wordles_played": wordles_played,
                     }
                 },
             )
-            # Game over, the user used all attempts
-            embed = discord.Embed(
-                title="Wordle Attempt",
-                description=f"Attempt {self.game.attempts}/{self.game.max_attempts}",
-                color=discord.Color.blue(),
-            )
-            embed.add_field(name="Feedback", value=feedback, inline=False)
-            embed.add_field(
-                name="Previous Attempts",
-                value="\n".join(
-                    [
-                        f"{i+1}. {attempt} - {attempt_feedback}"
-                        for i, (attempt, attempt_feedback) in enumerate(
-                            self.game.previous_attempts
-                        )
-                    ]
-                ),
-                inline=False,
-            )
-            embed.set_footer(
-                text=f"{wordles_won} wordles won, {wordles_lost} wordles lost, {wordles_played} wordles played"
-            )
-            await self.game.message.edit(
-                content=f"❌ Game Over! The word was {self.game.target_word}.",
-                embed=embed,
-            )
-            del self.game  # Delete the game object to end it
-        else:
-            # Continue the game with updated feedback
-            embed = discord.Embed(
-                title="Wordle Attempt",
-                description=f"Attempt {self.game.attempts}/{self.game.max_attempts}",
-                color=discord.Color.blue(),
-            )
-            embed.add_field(name="Feedback", value=feedback, inline=False)
-            embed.add_field(
-                name="Previous Attempts",
-                value="\n".join(
-                    [
-                        f"{i+1}. {attempt} - {attempt_feedback}"
-                        for i, (attempt, attempt_feedback) in enumerate(
-                            self.game.previous_attempts
-                        )
-                    ]
-                ),
-                inline=False,
-            )
-            await self.game.message.edit(embed=embed)
 
-        await interaction.response.send_message(
-            "\U0001f389", ephemeral=True, delete_after=1
+            # Construct game-over message
+            result_msg = (
+                f"🎉 You guessed the word {self.game.target_word}!"
+                if game_over
+                else f"❌ Game Over! The word was {self.game.target_word}."
+            )
+            await self.end_game(
+                interaction,
+                result_msg,
+                feedback,
+                wordles_won,
+                wordles_lost,
+                wordles_played,
+            )
+        else:
+            # Continue the game
+            await self.update_game_feedback(interaction, feedback)
+
+    async def update_game_feedback(self, interaction, feedback):
+        embed = self.build_embed(
+            feedback, f"Attempt {self.game.attempts}/{self.game.max_attempts}"
         )
+        await self.game.message.edit(embed=embed)
+
+    async def end_game(
+        self,
+        interaction,
+        result_msg,
+        feedback,
+        wordles_won,
+        wordles_lost,
+        wordles_played,
+    ):
+        embed = self.build_embed(
+            feedback, f"Attempt {self.game.attempts}/{self.game.max_attempts}"
+        )
+        embed.set_footer(
+            text=f"{wordles_won} wordles won, {wordles_lost} wordles lost, {wordles_played} wordles played"
+        )
+        await self.game.message.edit(content=result_msg, embed=embed, view=None)
+        del self.games[self.user_id]
+
+    def build_embed(self, feedback, description):
+        embed = discord.Embed(
+            title="Wordle Attempt",
+            description=description,
+            color=discord.Color.blue(),
+        )
+        embed.add_field(name="Feedback", value=feedback, inline=False)
+        embed.add_field(
+            name="Previous Attempts",
+            value="\n".join(
+                f"{i + 1}. {attempt} - {attempt_feedback}"
+                for i, (attempt, attempt_feedback) in enumerate(
+                    self.game.previous_attempts
+                )
+            ),
+            inline=False,
+        )
+        return embed
 
 
 async def setup(bot: commands.Bot) -> None:
