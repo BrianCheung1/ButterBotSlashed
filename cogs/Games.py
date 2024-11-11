@@ -64,7 +64,7 @@ class Games(commands.Cog):
             "You have 6 attempts. After each guess, I will give you feedback:\n"
             "**Bold Letter** means the letter is correct and in the correct position.\n"
             "__Underlined__ means the letter is correct but in the wrong position.\n"
-            "Letters with no formatting are incorrect.\n",
+            "~~Letters~~ means the letter is incorrect.\n",
             view=view,
         )
 
@@ -1162,6 +1162,7 @@ class WordleGame:
         self.attempts = 0
         self.max_attempts = 6
         self.message = None
+        print(self.target_word)
 
     def get_five_letter_words(self):
         response = requests.get("https://api.datamuse.com/words?sp=?????")
@@ -1197,7 +1198,7 @@ class WordleGame:
                         break
             # If no match, mark it as incorrect (gray)
             if not feedback[i]:
-                feedback[i] = guess[i]
+                feedback[i] = f"~~{guess[i]}~~"
 
         return " ".join(feedback)  # Return feedback as a string
 

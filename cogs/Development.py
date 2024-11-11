@@ -10,6 +10,8 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
+from utils.logging import send_error_to_support_channel
+
 GUILD_ID = 152954629993398272
 
 
@@ -87,8 +89,11 @@ class Development(commands.Cog):
         """Syncs commands to all servers and lists synced command names."""
         await interaction.response.defer()
         synced = await self.bot.tree.sync()
+        syncedGuild = await self.bot.tree.sync(guild=discord.Object(id=GUILD_ID))
+
         await interaction.followup.send(
-            f"Synced {len(synced)} commands globally to {len(self.bot.guilds)} guilds"
+            f"Synced {len(synced)} commands globally to {len(self.bot.guilds)} guilds\n"
+            f"Synced {len(syncedGuild)} commands  to {interaction.guild} guild"
         )
 
     @app_commands.command(
@@ -131,7 +136,7 @@ class Development(commands.Cog):
 
         # Send the organized command lists
         await interaction.followup.send(
-            f"**Global Commands**:\n{global_command_list}\n\n**Guild-Specific Commands**:\n{guild_command_list}"
+            f"**Global Commands**: {len(global_commands)} \n{global_command_list}\n\n**Guild-Specific Commands**: {len(guild_commands)}\n{guild_command_list}"
         )
 
     @app_commands.command(name="stats", description="show stats of the bot")
@@ -184,6 +189,27 @@ class Development(commands.Cog):
         embed.set_thumbnail(url=self.bot.user.display_avatar)
         embed.timestamp = datetime.now()
         await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="error", description="raise an error")
+    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    async def error_command(self, interaction: discord.Interaction):
+        try:
+            # Some code that could raise an error
+            raise ValueError(
+                "This is a test error"
+            )  # Simulating an error for demonstration
+
+        except Exception as e:
+            # Error occurred, send the error details to the support channel
+            error_message = str(e)
+            await send_error_to_support_channel(
+                bot=interaction.client,  # Pass the bot instance
+                target_guild_id=152954629993398272,  # Replace with the actual target guild ID
+                target_channel_id=455431053528793098,  # Replace with the actual channel ID
+                error=error_message,
+                interaction=interaction,
+                admin_user=None,  # You can provide an admin user if needed
+            )
 
     @tasks.loop(minutes=5)  # Update status every 5 minutes
     async def my_background_task(self):

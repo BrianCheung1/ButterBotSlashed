@@ -10,9 +10,13 @@ import tmdbsimple as tmdb
 from discord import app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
+from plexapi.server import PlexServer
 
 load_dotenv()
 tmdb.API_KEY = os.getenv("TMDB")
+PLEX_URL = os.getenv("PLEX_URL")
+PLEX_TOKEN = os.getenv("PLEX_TOKEN")
+plex = PlexServer(PLEX_URL, PLEX_TOKEN)
 
 
 class Streaming(commands.Cog):

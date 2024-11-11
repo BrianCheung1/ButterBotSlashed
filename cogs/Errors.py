@@ -7,6 +7,8 @@ from discord.app_commands import (AppCommandError, CheckFailure,
                                   CommandOnCooldown, MissingPermissions)
 from discord.ext import commands
 
+from utils.logging import send_error_to_support_channel
+
 # Set up logging for better error tracking
 logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
@@ -24,10 +26,6 @@ class Errors(commands.Cog):
     ):
         # Log the error for further analysis
         logger.error(f"Error running command Interaction: {interaction} Error: {error}")
-
-        # Get the user to ping for feedback (replace with actual user ID or username)
-        admin_user_id = 1047615361886982235  # Replace with the admin's Discord user ID
-        admin_user = self.bot.get_user(admin_user_id)
 
         # The specific server/channel ID where the error should be sent
         target_guild_id = 152954629993398272  # Replace with the target guild ID
@@ -91,30 +89,14 @@ class Errors(commands.Cog):
             )
             return  # Don't proceed further if the interaction is invalid
         finally:
-            # Send error details to a specific channel in another server
-            target_guild = self.bot.get_guild(target_guild_id)
-            if target_guild:
-                target_channel = target_guild.get_channel(target_channel_id)
-                if target_channel:
-                    # Send the error details to the support channel
-                    await target_channel.send(
-                        f"Error occurred in {interaction.guild.name} ({interaction.guild.id}):\n"
-                        f"Command: `/{interaction.command.name}` triggered by {interaction.user.name} ({interaction.user.id})\n"
-                        f"Error: {error}"
-                    )
-                    # Ping the admin user in the support channel for feedback
-                    if admin_user:
-                        await target_channel.send(
-                            f"<@{admin_user.id}>, Please check the error!"
-                        )
-                    else:
-                        logger.error(f"Admin user {admin_user_id} not found.")
-                else:
-                    logger.error(
-                        f"Channel {target_channel_id} not found in guild {target_guild_id}."
-                    )
-            else:
-                logger.error(f"Guild {target_guild_id} not found.")
+            # Call the utility function to send the error details
+            await send_error_to_support_channel(
+                self.bot,
+                target_guild_id,
+                target_channel_id,
+                str(error),
+                interaction,
+            )
 
 
 async def setup(bot: commands.Bot) -> None:
