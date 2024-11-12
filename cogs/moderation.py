@@ -1,9 +1,13 @@
+import asyncio
+import os
 from datetime import datetime
 from typing import Optional
 
+import aiohttp
 import discord
 from discord import app_commands
 from discord.ext import commands
+from transformers import pipeline
 
 
 class Moderation(commands.Cog):
@@ -11,6 +15,8 @@ class Moderation(commands.Cog):
 
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
+        # Load the DialoGPT model from Hugging Face
+        self.generator = pipeline("text-generation", model="gpt2")
 
     @app_commands.command(
         name="purge",
@@ -93,9 +99,63 @@ class Moderation(commands.Cog):
         # if the author of a message is a bot stop
         if message.author.bot:
             return
+
+        # Check if the bot was mentioned
+        if self.bot.user in message.mentions:
+            # Remove mention from the message content
+            user_input = message.content.replace(f"<@{self.bot.user.id}>", "").strip()
+            if user_input:
+                # Generate an AI response
+                generating_message = await message.reply("Generating response...")
+                response = await self.generate_ai_response(user_input)
+                await generating_message.edit(content=response)
+            else:
+                await message.reply(
+                    "Hello! Mention me with a message, and I'll respond!"
+                )
         print(
             f'[{str(message.guild).title()}][{str(message.channel).title()}][{datetime.now().strftime("%I:%M:%S:%p")}] {message.author}: {message.content}'
         )
+
+    # Generate an AI response using Cloudflare Worker AI API asynchronously
+    async def generate_ai_response(self, user_input: str) -> str:
+        WORKERS_ACCOUNT_ID = os.getenv("WORKERS_ACCOUNT_ID")
+        API_BASE_URL = f"https://api.cloudflare.com/client/v4/accounts/{WORKERS_ACCOUNT_ID}/ai/run/"
+        WORKERS_API_KEY = os.getenv("WORKERS_API_KEY")
+        headers = {"Authorization": f"Bearer {WORKERS_API_KEY}"}
+
+        async with aiohttp.ClientSession() as session:
+            input_data = {
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "You are a passive-aggressive discord bot that tries to answer questions or prompts",
+                    },
+                    {"role": "user", "content": user_input},
+                ]
+            }
+            retries = 3
+            for attempt in range(retries):
+                try:
+                    async with session.post(
+                        f"{API_BASE_URL}@cf/meta/llama-3-8b-instruct",
+                        json=input_data,
+                        headers=headers,
+                    ) as response:
+                        if response.status == 200:
+                            data = await response.json()
+                            return data.get("result", {}).get(
+                                "response", "Sorry, I couldn't generate a response."
+                            )
+                        else:
+                            return "Sorry, there was an error with the AI request."
+                except asyncio.TimeoutError:
+                    if attempt < retries - 1:
+                        await asyncio.sleep(2)  # Wait before retrying
+                    else:
+                        return "Sorry, the request timed out after multiple attempts."
+                except Exception as e:
+                    return f"An error occurred: {str(e)}"
 
 
 class SelfRoleButton(discord.ui.View):

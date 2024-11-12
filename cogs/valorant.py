@@ -3,6 +3,7 @@ import uuid
 from datetime import datetime, timedelta
 from typing import List, Optional
 
+import aiosqlite
 import discord
 import requests
 from discord import app_commands
@@ -21,6 +22,43 @@ class Valorant(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
         self.queue_manager = QueueManager()
+        self.db_folder = "valorant_database"
+
+        # Ensure the 'database' folder exists
+        if not os.path.exists(self.db_folder):
+            os.makedirs(self.db_folder)
+
+        # Specify the full path for the database
+        self.db_path = os.path.join(self.db_folder, "valorant_stats.db")
+
+        # Initialize the database asynchronously
+        self.bot.loop.create_task(self._initialize_db())
+
+    async def _initialize_db(self):
+        """Initialize the SQLite database and create the necessary table."""
+        self.db = await aiosqlite.connect(self.db_path)
+        await self.db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS player_lookups (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                tag TEXT NOT NULL,
+                region TEXT NOT NULL
+            )
+            """
+        )
+        await self.db.commit()
+
+    async def store_player_lookup(self, name: str, tag: str, region: str):
+        """Store player lookup information in the database."""
+        await self.db.execute(
+            """
+            INSERT INTO player_lookups (name, tag, region)
+            VALUES (?, ?, ?)
+        """,
+            (name, tag, region),
+        )
+        await self.db.commit()
 
     @app_commands.command(name="valorantgames")
     @app_commands.describe(
@@ -40,6 +78,7 @@ class Valorant(commands.Cog):
         stored_matches = self.get_stored_matches(region, name, tag)
         current_season = self.get_current_season()
         if isinstance(stored_matches, str):
+            await self.store_player_lookup(name, tag, region)
             await interaction.followup.send(f"{stored_matches}")
             return
 
@@ -81,7 +120,6 @@ class Valorant(commands.Cog):
     ):
         """Returns the stats of a valorant player's mmr history"""
         await interaction.response.defer()
-
         api_url = f"https://api.henrikdev.xyz/valorant/v1/mmr-history/na/{name}/{tag}?api_key={VAL_KEY}"
         api_url2 = f"https://api.henrikdev.xyz/valorant/v1/mmr/na/{name}/{tag}?api_key={VAL_KEY}"
         response = requests.get(api_url)
@@ -103,6 +141,7 @@ class Valorant(commands.Cog):
                     "Failed to fetch MMR history. Incorrect Name or Tag."
                 )
                 return
+            await self.store_player_lookup(name, tag, region)
             current_rank = current_mmr_data.get("currenttierpatched", "Unknown")
             current_rr = current_mmr_data.get("elo", 0)
             current_rank_picture = current_mmr_data.get("images", {}).get(
@@ -175,6 +214,7 @@ class Valorant(commands.Cog):
     ):
         """Returns the stats of a valorant player's"""
         await interaction.response.defer()
+
         account_details = self.get_account_details(name, tag)
         stored_matches = self.get_stored_matches(region, name, tag)
         current_season = self.get_current_season()
@@ -186,6 +226,7 @@ class Valorant(commands.Cog):
             or isinstance(stored_matches, str)
             or isinstance(mmr_history, str)
         ):
+            await self.store_player_lookup(name, tag, region)
             await interaction.followup.send(
                 f"{account_details} \n{stored_matches} \n{mmr_history}"
             )
@@ -218,6 +259,7 @@ class Valorant(commands.Cog):
     ):
         """Returns the stats of a valorant player's using tracker.gg api"""
         await interaction.response.defer()
+
         api_url = f"https://api.tracker.gg/api/v2/valorant/standard/matches/riot/{name.replace(' ', '%20')}%23{tag}"
 
         headers = {
@@ -227,6 +269,7 @@ class Valorant(commands.Cog):
         }
         response = requests.get(api_url, headers=headers)
         if response.status_code == 200:
+            await self.store_player_lookup(name, tag, "NA")
             data = response.json()
 
             # Process the data to create select options
@@ -377,6 +420,81 @@ class Valorant(commands.Cog):
         else:
             print(response.status_code)
             await interaction.followup.send("Error with API, Try again later")
+
+    @valorant_games.autocomplete("name")
+    @valorant_mmr_history.autocomplete("name")
+    @valorant_stats.autocomplete("name")
+    @valorant_tracker.autocomplete("name")
+    async def autocomplete_name(
+        self, interaction: discord.Interaction, current: str
+    ) -> List[app_commands.Choice]:
+        """Autocomplete player name based on database."""
+        async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute(
+                """
+                SELECT DISTINCT name FROM player_lookups
+                WHERE name LIKE ?
+                LIMIT 25
+                """,
+                (f"{current}%",),
+            )
+            results = await cursor.fetchall()
+        return [app_commands.Choice(name=row[0], value=row[0]) for row in results]
+
+    @valorant_games.autocomplete("tag")
+    @valorant_mmr_history.autocomplete("tag")
+    @valorant_stats.autocomplete("tag")
+    @valorant_tracker.autocomplete("tag")
+    async def autocomplete_tag(
+        self, interaction: discord.Interaction, current: str
+    ) -> List[app_commands.Choice]:
+        """Autocomplete player tag based on database."""
+        chosen_name = None
+        for option in interaction.data.get("options", []):
+            if option["name"] == "name":
+                chosen_name = option.get("value", None)
+                break  # Stop looping once we find the 'name'
+
+        if not chosen_name:
+            return []  # If no name is selected, return an empty list
+
+        async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute(
+                """
+                SELECT DISTINCT tag
+                FROM player_lookups
+                WHERE tag LIKE ?
+                ORDER BY
+                    CASE WHEN name = ? THEN 0 ELSE 1 END, -- Prioritize chosen name's tag
+                    tag ASC -- Alphabetical order for other tags
+                LIMIT 25
+                """,
+                (
+                    f"{current}%",  # Match tags starting with the current input
+                    chosen_name,  # Prioritize tags associated with the chosen name
+                ),
+            )
+            results = await cursor.fetchall()
+
+        if not results:
+            return []  # Return an empty list if no results are found
+
+        return [app_commands.Choice(name=row[0], value=row[0]) for row in results]
+
+    @valorant_games.autocomplete("region")
+    @valorant_mmr_history.autocomplete("region")
+    @valorant_stats.autocomplete("region")
+    async def autocomplete_region(
+        self, interaction: discord.Interaction, current: str
+    ) -> List[app_commands.Choice]:
+        """Autocomplete region from predefined list."""
+        regions = ["NA", "EU", "AP", "KR", "LATAM", "BR"]
+        matching_regions = [
+            app_commands.Choice(name=region, value=region)
+            for region in regions
+            if current.lower() in region.lower()
+        ]
+        return matching_regions
 
     @app_commands.command(name="valorantqueue")
     @app_commands.describe(

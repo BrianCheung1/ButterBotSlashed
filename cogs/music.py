@@ -123,7 +123,7 @@ class Music(commands.Cog):
             # player = player_results[idx]
 
             reaction, user = await self.bot.wait_for(
-                "reaction_add", timeout=1, check=check
+                "reaction_add", timeout=60, check=check
             )
             selected_index = reactions.index(str(reaction.emoji))
             player = player_results[selected_index]  # Get the song dictionary
