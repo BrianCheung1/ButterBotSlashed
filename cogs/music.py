@@ -7,8 +7,14 @@ from discord.ext import commands
 
 
 class YTDLSource:
+    search_cache = {}
+
     @staticmethod
     async def from_url(url: str, *, loop=None, stream=False):
+        # Check if the search term is already cached
+        if url in YTDLSource.search_cache:
+            return YTDLSource.search_cache[url]
+
         ydl_opts = {
             "format": "bestaudio/best",
             "extractaudio": True,
@@ -18,22 +24,34 @@ class YTDLSource:
             "quiet": True,
             "logtostderr": False,
             "nocheckcertificate": True,
-            "default_search": "ytsearch",
+            "default_search": "ytsearch5",
             "source_address": None,
-            "noplaylist": True,  # Make sure playlists are not included
+            "noplaylist": True,
+            "geo_bypass": True,  # Try bypassing regional restrictions
+            "sleep_interval": 1,  # Reduce sleep time between requests
         }
 
         if stream:
             ydl_opts["force_generic_extractor"] = True
             ydl_opts["quiet"] = False
 
+        # Perform the search asynchronously
+        loop = asyncio.get_event_loop()
         with youtube_dl.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
+            info = await loop.run_in_executor(
+                None, lambda: ydl.extract_info(url, download=False)
+            )
             # Check if 'entries' exists and return the list of results
             if "entries" in info:
-                return info["entries"]  # Return the list of search results
+                results = info["entries"]
+            elif "url" in info:
+                results = [info]
             else:
-                return []  # Return an empty list if no entries are found
+                results = []  # No results found
+
+        # Cache the results for later use
+        YTDLSource.search_cache[url] = results
+        return results
 
 
 class Music(commands.Cog):
@@ -51,47 +69,64 @@ class Music(commands.Cog):
         query="link to song you want played or general term to search for"
     )
     async def play(self, interaction: discord.Interaction, query: str):
-        await interaction.response.defer()
 
-        # Search for the top 5 results for the given query
-        player_results = await YTDLSource.from_url(
-            query, loop=self.bot.loop, stream=True
+        # Connect to voice channel if not already connected
+        if interaction.guild.voice_client is None:
+            if interaction.user.voice:
+                await interaction.user.voice.channel.connect()
+            else:
+                return await interaction.response.send_message(
+                    "You are not connected to a voice channel."
+                )
+
+        await interaction.response.defer()
+        # Search for the top 5 results in the background
+        search_task = asyncio.create_task(
+            YTDLSource.from_url(query, loop=self.bot.loop, stream=True)
         )
 
+        # While waiting for the search task to complete, let the bot process other commands
+        player_results = await search_task
+
+        if not player_results:
+            return await interaction.followup.send("No results found for your query.")
+
         # Create an embed with the top 5 songs for the user to choose from
-        embed = discord.Embed(title="Top 5 Songs for Your Search")
+        # Create an embed with the top 5 songs
+        embed = discord.Embed(
+            title="Top 5 Songs for Your Search", color=discord.Color.blue()
+        )
+        reactions = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"]
         for idx, player in enumerate(player_results[:5], 1):
             embed.add_field(
-                name=f"{idx}. {player['title']}",
+                name=f"{reactions[idx - 1]} {player['title']}",
                 value=f"[{player['webpage_url']}]",
                 inline=False,
             )
 
         await interaction.followup.send(
-            content="Please select a song by number (1-5):", embed=embed
+            content="Please choose a song using the reactions", embed=embed
         )
+        message = await interaction.original_response()
+        # Add reactions for user selection
+        for reaction in reactions[: len(player_results)]:
+            await message.add_reaction(reaction)
 
-        def check(msg):
-            return (
-                msg.author == interaction.user
-                and msg.content.isdigit()
-                and 1 <= int(msg.content) <= 5
-            )
+        # Define a check function to ensure only the user who invoked the command can react
+        def check(reaction, user):
+            return user == interaction.user and str(reaction.emoji) in reactions
 
         # Wait for user response
         try:
-            msg = await self.bot.wait_for("message", check=check, timeout=30.0)
-            idx = int(msg.content) - 1
-            player = player_results[idx]
+            # msg = await self.bot.wait_for("message", check=check, timeout=30.0)
+            # idx = int(msg.content) - 1
+            # player = player_results[idx]
 
-            # Connect to voice channel if not already connected
-            if interaction.guild.voice_client is None:
-                if interaction.user.voice:
-                    await interaction.user.voice.channel.connect()
-                else:
-                    return await interaction.response.send_message(
-                        "You are not connected to a voice channel."
-                    )
+            reaction, user = await self.bot.wait_for(
+                "reaction_add", timeout=1, check=check
+            )
+            selected_index = reactions.index(str(reaction.emoji))
+            player = player_results[selected_index]  # Get the song dictionary
 
             # Create an FFmpegPCMAudio source from the selected video URL
             audio_source = discord.FFmpegPCMAudio(
@@ -144,9 +179,11 @@ class Music(commands.Cog):
                     )
 
         except asyncio.TimeoutError:
-            await interaction.followup.send(
-                "You took too long to respond. Cancelling the song selection."
+            await message.edit(
+                content="You took too long to respond. Cancelling the song selection.",
+                embed=None,
             )
+            await self.check_queue(interaction)
 
     @app_commands.command(name="stop", description="disconnect the bot from the server")
     async def stop(self, interaction: discord.Interaction):

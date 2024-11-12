@@ -2,9 +2,14 @@ import logging
 
 import discord
 from discord import Forbidden, NotFound
-from discord.app_commands import (AppCommandError, CheckFailure,
-                                  CommandInvokeError, CommandNotFound,
-                                  CommandOnCooldown, MissingPermissions)
+from discord.app_commands import (
+    AppCommandError,
+    CheckFailure,
+    CommandInvokeError,
+    CommandNotFound,
+    CommandOnCooldown,
+    MissingPermissions,
+)
 from discord.ext import commands
 
 from utils.logging import send_error_to_support_channel
@@ -25,7 +30,9 @@ class Errors(commands.Cog):
         self, interaction: discord.Interaction, error: AppCommandError
     ):
         # Log the error for further analysis
-        logger.error(f"Error running command Interaction: {interaction} Error: {error}")
+        logger.error(
+            f"Error running command Interaction:\n{interaction.command.name}\nError:\n{error}"
+        )
 
         # The specific server/channel ID where the error should be sent
         target_guild_id = 152954629993398272  # Replace with the target guild ID
