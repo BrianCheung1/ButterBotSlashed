@@ -7,7 +7,7 @@ import aiohttp
 import discord
 from discord import app_commands
 from discord.ext import commands
-from transformers import pipeline
+import aiosqlite
 
 
 class Moderation(commands.Cog):
@@ -15,8 +15,31 @@ class Moderation(commands.Cog):
 
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
-        # Load the DialoGPT model from Hugging Face
-        self.generator = pipeline("text-generation", model="gpt2")
+        self.db_folder = "ai_database"
+
+        # Ensure the 'database' folder exists
+        if not os.path.exists(self.db_folder):
+            os.makedirs(self.db_folder)
+
+        # Specify the full path for the database
+        self.db_path = os.path.join(self.db_folder, "interaction_history.db")
+
+        # Initialize the database asynchronously
+        self.bot.loop.create_task(self.initialize_db())
+
+    async def initialize_db(self):
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                """
+                CREATE TABLE IF NOT EXISTS interactions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id TEXT NOT NULL,
+                    user_message TEXT NOT NULL,
+                    bot_response TEXT NOT NULL
+                )
+            """
+            )
+            await db.commit()
 
     @app_commands.command(
         name="purge",
@@ -107,7 +130,9 @@ class Moderation(commands.Cog):
             if user_input:
                 # Generate an AI response
                 generating_message = await message.reply("Generating response...")
-                response = await self.generate_ai_response(user_input)
+                history = await self.get_user_history(message.author.id)
+                response = await self.generate_ai_response(user_input, history)
+                await self.log_interaction(message.author.id, message.content, response)
                 await generating_message.edit(content=response)
             else:
                 await message.reply(
@@ -118,7 +143,7 @@ class Moderation(commands.Cog):
         )
 
     # Generate an AI response using Cloudflare Worker AI API asynchronously
-    async def generate_ai_response(self, user_input: str) -> str:
+    async def generate_ai_response(self, user_input: str, history: str) -> str:
         WORKERS_ACCOUNT_ID = os.getenv("WORKERS_ACCOUNT_ID")
         API_BASE_URL = f"https://api.cloudflare.com/client/v4/accounts/{WORKERS_ACCOUNT_ID}/ai/run/"
         WORKERS_API_KEY = os.getenv("WORKERS_API_KEY")
@@ -129,7 +154,7 @@ class Moderation(commands.Cog):
                 "messages": [
                     {
                         "role": "system",
-                        "content": "You are a passive-aggressive discord bot that tries to answer questions or prompts",
+                        "content": f"You are a passive-aggressive discord bot that tries to answer questions or prompts, Here is a list of your past questions and answers {history}",
                     },
                     {"role": "user", "content": user_input},
                 ]
@@ -156,6 +181,34 @@ class Moderation(commands.Cog):
                         return "Sorry, the request timed out after multiple attempts."
                 except Exception as e:
                     return f"An error occurred: {str(e)}"
+
+    async def log_interaction(self, user_id: str, user_message: str, bot_response: str):
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                """
+                INSERT INTO interactions (user_id, user_message, bot_response)
+                VALUES (?, ?, ?)
+            """,
+                (user_id, user_message, bot_response),
+            )
+            await db.commit()
+
+    async def get_user_history(self, user_id: str, limit: int = 5) -> str:
+        async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute(
+                """
+                SELECT user_message, bot_response FROM interactions
+                WHERE user_id = ?
+                LIMIT ?
+            """,
+                (user_id, limit),
+            )
+            rows = await cursor.fetchall()
+            await cursor.close()
+
+        # Format history as a string for the AI prompt
+        history = "\n".join(f"User: {row[0]}\nBot: {row[1]}" for row in reversed(rows))
+        return history
 
 
 class SelfRoleButton(discord.ui.View):

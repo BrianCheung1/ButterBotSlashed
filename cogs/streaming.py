@@ -65,24 +65,38 @@ class Streaming(commands.Cog):
     @app_commands.describe(query="Movie you want to search")
     async def movie(self, interaction: discord.Interaction, query: str):
         await interaction.response.defer()
-        search = tmdb.Search()
-        if not search.results:
+
+        response = tmdb.Search()
+        search = response.movie(query=query)
+        results = search.get("results", [])  # Get the list of results from the response
+
+        if not results:
             await interaction.followup.send("No results for your query")
+            return
+
         view = discord.ui.View()
         embed = discord.Embed()
-        results = ""
-        for index, result in enumerate(search.results):
-            view.add_item(MovieButton(index + 1, search.results[index]))
-            results += f'{index+1}. **{result["title"]}** {result["release_date"]}\n'
-            if index >= 4:
+        result_text = ""
+
+        for index, result in enumerate(results):
+            title = result.get("title", "Unknown Title")
+            release_date = result.get("release_date", "Unknown Date")
+            view.add_item(
+                MovieButton(index + 1, result)
+            )  # Use the result object directly
+            result_text += f"{index + 1}. **{title}** ({release_date})\n"
+
+            if index >= 4:  # Show only the top 5 results
                 break
-        view.add_item(MovieMenuButton(query, search.results))
-        embed.add_field(name=f"Results for {query.title()}", value=results)
+
+        view.add_item(MovieMenuButton(query, results))
+        embed.add_field(name=f"Results for '{query.title()}'", value=result_text)
         embed.timestamp = datetime.now()
         embed.set_footer(
-            text=f"{interaction.user.display_name}",
-            icon_url=interaction.user.display_avatar,
+            text=f"Requested by {interaction.user.display_name}",
+            icon_url=interaction.user.display_avatar.url,
         )
+
         await interaction.followup.send(embed=embed, view=view)
 
     @app_commands.command(
@@ -172,29 +186,43 @@ class Streaming(commands.Cog):
             )
 
     @app_commands.command(
-        name="tv_show", description="Shows information about a tv show"
+        name="tv_show", description="Shows information about a TV show"
     )
     @app_commands.describe(query="TV show you want to search")
     async def tv_show(self, interaction: discord.Interaction, query: str):
         await interaction.response.defer()
-        search = tmdb.Search()
-        if not search.results:
+
+        response = tmdb.Search()
+        search = response.tv(query=query)  # Use `tv` method for TV show search
+        results = search.get(
+            "results", []
+        )  # Get the list of results or empty list if none
+
+        if not results:
             await interaction.followup.send("No results for your query")
+            return
+
         view = discord.ui.View()
         embed = discord.Embed()
-        results = ""
-        for index, result in enumerate(search.results):
-            view.add_item(TVButton(index + 1, search.results[index]))
-            results += f'{index+1}. **{result["original_name"]}**\n'
-            if index >= 4:
+        result_text = ""
+
+        for index, result in enumerate(results):
+            original_name = result.get("original_name", "Unknown Name")
+            first_air_date = result.get("first_air_date", "Unknown Date")
+            view.add_item(TVButton(index + 1, result))  # Use the result object directly
+            result_text += f"{index + 1}. **{original_name}** ({first_air_date})\n"
+
+            if index >= 4:  # Show only the top 5 results
                 break
-        view.add_item(TVMenuButton(query, search.results))
-        embed.add_field(name=f"Results for {query.title()}", value=results)
+
+        view.add_item(TVMenuButton(query, results))
+        embed.add_field(name=f"Results for '{query.title()}'", value=result_text)
         embed.timestamp = datetime.now()
         embed.set_footer(
-            text=f"{interaction.user.display_name}",
-            icon_url=interaction.user.display_avatar,
+            text=f"Requested by {interaction.user.display_name}",
+            icon_url=interaction.user.display_avatar.url,
         )
+
         await interaction.followup.send(embed=embed, view=view)
 
     @app_commands.command(name="popular_animes", description="Shows popular anime")
@@ -323,6 +351,7 @@ class Streaming(commands.Cog):
             async with aiosqlite.connect(db_name) as db:
                 async with db.execute("SELECT name, link FROM movies") as cursor:
                     movies = await cursor.fetchall()
+                    total_movies = len(movies)
                     if not movies:
                         await interaction.response.send_message(
                             f"No movies found in the database for guild ID {guild_id}."
@@ -332,7 +361,7 @@ class Streaming(commands.Cog):
                     # Divide movies into chunks of 10 and add index numbers
                     chunks = [movies[i : i + 10] for i in range(0, len(movies), 10)]
                     await interaction.response.send_message(
-                        f"List of movies in guild {guild_id}:"
+                        f"List of movies in guild {interaction.guild.name} (Total: {total_movies} movies):"
                     )
 
                     movie_index = 1  # Start the index counter
@@ -343,8 +372,7 @@ class Streaming(commands.Cog):
                             for i, (name, link) in enumerate(chunk)
                         )
                         movie_index += len(chunk)  # Update the index for the next chunk
-
-                    await interaction.channel.send(movie_list)
+                        await interaction.channel.send(movie_list)
         except Exception:
             await interaction.response.send_message(
                 f"No movies found in the database for guild ID {guild_id}."
@@ -425,19 +453,33 @@ class Streaming(commands.Cog):
 
     @app_commands.command(name="list_databases")
     async def list_databases(self, interaction: discord.Interaction):
-        """List all available movie databases and allow the user to select one."""
-        # Fetch full guild objects for each guild ID in MY_GUILDS
+        """List all available movie databases and allow the user to select one, with the total movie count for each guild."""
+        await interaction.response.defer()
         guild_list = []
         for guild in self.bot.guilds:
             if guild:
-                guild_list.append(f"{guild.name}\n`{guild.id}`")
+                db_name = self.get_db_name(guild.id)
+                total_movies = 0
+
+                try:
+                    # Fetch the count of movies in the current guild's database
+                    async with aiosqlite.connect(db_name) as db:
+                        async with db.execute("SELECT COUNT(*) FROM movies") as cursor:
+                            total_movies = await cursor.fetchone()
+                            total_movies = total_movies[0] if total_movies else 0
+                except Exception as e:
+                    print(f"Error fetching movie count for guild {guild.id}: {e}")
+
+                guild_list.append(
+                    f"{guild.name} (`{guild.id}`) - Total Movies: {total_movies}"
+                )
             else:
-                guild_list.append(f"(Unknown Guild)\n`{guild.id}`")
+                guild_list.append(f"(Unknown Guild) (`{guild.id}`) - Total Movies: 0")
 
         guild_list_text = "\n".join(guild_list)
 
         # Send the list to the user
-        await interaction.response.send_message(
+        await interaction.followup.send(
             f"Available movie databases:\n{guild_list_text}\n\n"
             "Please use `/list_movies <guild_id>` to list movies for a specific database."
         )
