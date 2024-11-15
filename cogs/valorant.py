@@ -23,6 +23,8 @@ class Valorant(commands.Cog):
         self.bot = bot
         self.queue_manager = QueueManager()
         self.db_folder = "valorant_database"
+        self.player_names = []
+        self.player_tags = []
 
         # Ensure the 'database' folder exists
         if not os.path.exists(self.db_folder):
@@ -429,6 +431,9 @@ class Valorant(commands.Cog):
         self, interaction: discord.Interaction, current: str
     ) -> List[app_commands.Choice]:
         """Autocomplete player name based on database."""
+        if current in self.player_names:
+            return self.player_names
+
         async with aiosqlite.connect(self.db_path) as db:
             cursor = await db.execute(
                 """
@@ -439,7 +444,11 @@ class Valorant(commands.Cog):
                 (f"{current}%",),
             )
             results = await cursor.fetchall()
-        return [app_commands.Choice(name=row[0], value=row[0]) for row in results]
+        self.player_names = [
+            app_commands.Choice(name=name[0], value=name[0]) for name in results
+        ]
+
+        return self.player_names
 
     @valorant_games.autocomplete("tag")
     @valorant_mmr_history.autocomplete("tag")
@@ -458,6 +467,8 @@ class Valorant(commands.Cog):
         if not chosen_name:
             return []  # If no name is selected, return an empty list
 
+        if current in self.player_tags:
+            return self.player_tags
         async with aiosqlite.connect(self.db_path) as db:
             cursor = await db.execute(
                 """
@@ -479,7 +490,11 @@ class Valorant(commands.Cog):
         if not results:
             return []  # Return an empty list if no results are found
 
-        return [app_commands.Choice(name=row[0], value=row[0]) for row in results]
+        self.player_tags = [
+            app_commands.Choice(name=tag[0], value=tag[0]) for tag in results
+        ]
+
+        return self.player_tags
 
     @valorant_games.autocomplete("region")
     @valorant_mmr_history.autocomplete("region")

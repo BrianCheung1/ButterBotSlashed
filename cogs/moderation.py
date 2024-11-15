@@ -4,10 +4,10 @@ from datetime import datetime
 from typing import Optional
 
 import aiohttp
+import aiosqlite
 import discord
 from discord import app_commands
 from discord.ext import commands
-import aiosqlite
 
 
 class Moderation(commands.Cog):

@@ -25,6 +25,7 @@ class Streaming(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
         self.db_folder = "database"
+        self.movies = {}
 
         # Ensure the 'database' folder exists
         if not os.path.exists(self.db_folder):
@@ -422,6 +423,40 @@ class Streaming(commands.Cog):
                 await interaction.response.send_message(
                     f"Movie not found: {movie_identifier}"
                 )
+
+    @remove_movie.autocomplete("movie_identifier")
+    async def movie_autocomplete(
+        self, interaction: discord.Interaction, current: str
+    ) -> list[app_commands.Choice]:
+        """Autocomplete function for movie_identifier."""
+        guild_id = interaction.guild.id
+        db_name = self.get_db_name(guild_id)
+
+        # Check if results are cached for the current input
+        if guild_id in self.movies and current in self.movies[guild_id]:
+            return self.movies[guild_id][current]
+
+        async with aiosqlite.connect(db_name) as db:
+            # Fetch movies that match the current input (case-insensitive)
+            cursor = await db.execute(
+                """
+                SELECT name FROM movies
+                WHERE LOWER(name) LIKE ?
+                LIMIT 25
+                """,
+                (f"%{current.lower()}%",),
+            )
+            movies = await cursor.fetchall()
+
+        # Cache the results for this guild and input
+        if guild_id not in self.movies:
+            self.movies[guild_id] = {}
+        self.movies[guild_id][current] = [
+            app_commands.Choice(name=movie[0], value=movie[0]) for movie in movies
+        ]
+
+        # Return a list of app_commands.Choice objects for autocomplete
+        return self.movies[guild_id][current]
 
     @app_commands.command(name="random_movie")
     async def random_movie(self, interaction: discord.Interaction):

@@ -171,6 +171,12 @@ class Games(commands.Cog):
             embed.add_field(
                 name="Steam Link", value=f"[Click Here]({steam_link})", inline=False
             )
+            request_link = "https://forms.gle/d1K2NBLfJBqoSsv59"
+            embed.add_field(
+                name="Have a request?",
+                value=f"[Click Here]({request_link})",
+                inline=False,
+            )
             embed.add_field(
                 name="Description", value=f"```{description}```", inline=False
             )
