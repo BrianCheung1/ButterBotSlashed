@@ -297,6 +297,16 @@ class Streaming(commands.Cog):
                 if re.match(r"^https?://(www\.)?imdb\.com/title/tt\d+/", entry):
                     movie_name = await self.get_movie_name_from_imdb(entry)
                     movie_link = entry
+                # Check if entry is a TMDb link
+                elif re.match(r"^https?://(www\.)?themoviedb\.org/movie/\d+", entry):
+                    tmdb_id_match = re.search(r"movie/(\d+)", entry)
+                    if tmdb_id_match:
+                        tmdb_id = tmdb_id_match.group(1)
+                        movie = tmdb.Movies(tmdb_id)
+                        response = movie.info()
+                        if "title" in response:
+                            movie_name = response["title"]
+                            movie_link = entry
                 else:
                     # Use tmdbsimple to search for the movie by name
                     search = tmdb.Search()
@@ -473,7 +483,9 @@ class Streaming(commands.Cog):
 
         async with aiosqlite.connect(db_name) as db:
             # Retrieve both `id`, `name`, and `link` of all movies
-            async with db.execute("SELECT id, name, link FROM movies") as cursor:
+            async with db.execute(
+                "SELECT id, name, link, added_by FROM movies"
+            ) as cursor:
                 movies = await cursor.fetchall()
                 if not movies:
                     await interaction.response.send_message(
@@ -483,14 +495,14 @@ class Streaming(commands.Cog):
 
                 # Choose a random movie
                 chosen_movie = random.choice(movies)
-                movie_id, movie_name, movie_link = chosen_movie
+                movie_id, movie_name, movie_link, added_by = chosen_movie
 
                 # Delete the chosen movie from the database
                 await db.execute("DELETE FROM movies WHERE id = ?", (movie_id,))
                 await db.commit()
 
                 # Prepare the response with a hyperlink and suppress preview
-                movie_message = f"Random movie: [{movie_name}](<{movie_link}>) (Deleted from database)"
+                movie_message = f"Random movie: [{movie_name}](<{movie_link}>) added by {added_by} (Deleted from database)"
                 await interaction.response.send_message(movie_message)
 
     @app_commands.command(name="list_databases")
