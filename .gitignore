@@ -152,6 +152,7 @@ cython_debug/
 #.idea/
 Test.py
 output_image.png
-/database
-/ai_database
-/valorant_database
+database/
+valorant_database/
+ai_database/
+
