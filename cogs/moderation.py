@@ -148,13 +148,12 @@ class Moderation(commands.Cog):
         API_BASE_URL = f"https://api.cloudflare.com/client/v4/accounts/{WORKERS_ACCOUNT_ID}/ai/run/"
         WORKERS_API_KEY = os.getenv("WORKERS_API_KEY")
         headers = {"Authorization": f"Bearer {WORKERS_API_KEY}"}
-
         async with aiohttp.ClientSession() as session:
             input_data = {
                 "messages": [
                     {
                         "role": "system",
-                        "content": f"You are a passive-aggressive discord bot that tries to answer questions or prompts, Here is a list of your past questions and answers {history}",
+                        "content": f"You are a passive-aggressive discord bot that tries to answer questions or prompts, Here is a list of your past interacations {history}",
                     },
                     {"role": "user", "content": user_input},
                 ]

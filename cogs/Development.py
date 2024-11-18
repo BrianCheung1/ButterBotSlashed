@@ -9,6 +9,7 @@ from typing import Literal, Optional
 import discord
 from discord import app_commands
 from discord.ext import commands, tasks
+import aiosqlite
 
 from utils.logging import send_error_to_support_channel
 
@@ -210,6 +211,57 @@ class Development(commands.Cog):
                 interaction=interaction,
                 admin_user=None,  # You can provide an admin user if needed
             )
+
+    @app_commands.command(name="update_tables", description="Update database")
+    @app_commands.check(is_owner_check)
+    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    async def update_tables(self, interaction: discord.Interaction):
+        """Update the movies table for all guilds to include the added_by column."""
+        await interaction.response.send_message("Starting database updates...")
+
+        updates = []  # Collect messages for each guild
+        for guild in self.bot.guilds:
+            db_name = self.get_db_name(guild.id)
+            try:
+                await self.modify_table_to_add_added_by(db_name)
+                updates.append(f"✅ Updated database for guild: **{guild.name}** ({guild.id})")
+            except Exception as e:
+                updates.append(f"❌ Failed to update database for guild: **{guild.name}** ({guild.id}). Error: {e}")
+
+        # Send a final update message
+        result_message = "\n".join(updates)
+        await interaction.followup.send(f"Database Update Results:\n{result_message}")
+
+    def get_db_name(self, guild_id):
+        """Generate a unique database name based on the guild ID."""
+        return os.path.join(self.db_folder, f"movies_{guild_id}.db")
+
+    async def modify_table_to_add_added_by(self, db_name):
+        async with aiosqlite.connect(db_name) as db:
+            # Step 1: Create the new table with the added_by column
+            await db.execute(
+                """
+                CREATE TABLE movies_new (
+                    id INTEGER PRIMARY KEY,
+                    name TEXT NOT NULL UNIQUE,
+                    link TEXT NOT NULL UNIQUE,
+                    added_by TEXT
+                )
+                """
+            )
+
+            # Step 2: Copy data from the old table to the new table
+            await db.execute(
+                "INSERT INTO movies_new (id, name, link) SELECT id, name, link FROM movies"
+            )
+
+            # Step 3: Drop the old table
+            await db.execute("DROP TABLE movies")
+
+            # Step 4: Rename the new table
+            await db.execute("ALTER TABLE movies_new RENAME TO movies")
+
+            await db.commit()
 
     @tasks.loop(minutes=5)  # Update status every 5 minutes
     async def my_background_task(self):

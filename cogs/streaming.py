@@ -284,6 +284,9 @@ class Streaming(commands.Cog):
         # Split the input by commas and strip whitespace
         link_list = [link.strip() for link in movie_links.split(",")]
 
+        if not interaction.user:
+            interaction.user = None
+
         db_name = self.get_db_name(guild_id)
         async with aiosqlite.connect(db_name) as db:
             added_movies = []
@@ -306,13 +309,13 @@ class Streaming(commands.Cog):
                         await interaction.response.send_message(
                             f"Movie not found: {entry}"
                         )
-                        continue  # Skip if movie couldn't be found
+                        return
 
                 # Attempt to add the movie to the database
                 try:
                     await db.execute(
-                        "INSERT INTO movies (name, link) VALUES (?, ?)",
-                        (movie_name, movie_link),
+                        "INSERT INTO movies (name, link, added_by) VALUES (?, ?, ?)",
+                        (movie_name, movie_link, interaction.user.name),
                     )
                     added_movies.append(
                         (movie_name, movie_link)
@@ -350,7 +353,9 @@ class Streaming(commands.Cog):
         db_name = self.get_db_name(guild_id)
         try:
             async with aiosqlite.connect(db_name) as db:
-                async with db.execute("SELECT name, link FROM movies") as cursor:
+                async with db.execute(
+                    "SELECT name, link, added_by FROM movies"
+                ) as cursor:
                     movies = await cursor.fetchall()
                     total_movies = len(movies)
                     if not movies:
@@ -369,8 +374,8 @@ class Streaming(commands.Cog):
                     for chunk in chunks:
                         # Format each movie with its index number
                         movie_list = "\n".join(
-                            f"{movie_index + i}. [{name}](<{link}>)"
-                            for i, (name, link) in enumerate(chunk)
+                            f"{movie_index + i}. [{name}](<{link}>) - Added By {added_by}"
+                            for i, (name, link, added_by) in enumerate(chunk)
                         )
                         movie_index += len(chunk)  # Update the index for the next chunk
                         await interaction.channel.send(movie_list)
@@ -396,7 +401,7 @@ class Streaming(commands.Cog):
 
             # Try to find the movie by title (case-insensitive)
             cursor = await db.execute(
-                "SELECT id, link, name FROM movies WHERE LOWER(name) = ?",
+                "SELECT id, link, name, added_by FROM movies WHERE LOWER(name) = ?",
                 (lower_identifier,),
             )
             movie = await cursor.fetchone()
@@ -404,21 +409,23 @@ class Streaming(commands.Cog):
             # If not found by title, try to find by link (case-insensitive)
             if not movie:
                 cursor = await db.execute(
-                    "SELECT id, link, name FROM movies WHERE LOWER(link) = ?",
+                    "SELECT id, link, name, added_by FROM movies WHERE LOWER(link) = ?",
                     (lower_identifier,),
                 )
                 movie = await cursor.fetchone()
 
             # If a movie was found, remove it
             if movie:
-                movie_id, movie_link, name = movie
+                movie_id, movie_link, name, added_by = movie
                 await db.execute("DELETE FROM movies WHERE id = ?", (movie_id,))
                 await db.commit()
 
                 # Format movie identifier as a hyperlink if link is available
                 link_text = f"[{name}](<{movie_link}>)"
 
-                await interaction.response.send_message(f"Removed movie: {link_text}")
+                await interaction.response.send_message(
+                    f"Removed movie: {link_text} added by {added_by}"
+                )
             else:
                 await interaction.response.send_message(
                     f"Movie not found: {movie_identifier}"
