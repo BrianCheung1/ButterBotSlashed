@@ -24,7 +24,7 @@ class YTDLSource:
             "quiet": True,
             "logtostderr": False,
             "nocheckcertificate": True,
-            "default_search": "ytsearch5",
+            "default_search": "ytsearch3",
             "source_address": None,
             "noplaylist": True,
             "geo_bypass": True,  # Try bypassing regional restrictions
@@ -96,8 +96,8 @@ class Music(commands.Cog):
         embed = discord.Embed(
             title="Top 5 Songs for Your Search", color=discord.Color.blue()
         )
-        reactions = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"]
-        for idx, player in enumerate(player_results[:5], 1):
+        reactions = ["1️⃣", "2️⃣", "3️⃣"]
+        for idx, player in enumerate(player_results[:3], 1):
             embed.add_field(
                 name=f"{reactions[idx - 1]} {player['title']}",
                 value=f"[{player['webpage_url']}]",
