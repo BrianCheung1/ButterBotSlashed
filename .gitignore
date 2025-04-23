@@ -152,7 +152,7 @@ cython_debug/
 #.idea/
 Test.py
 output_image.png
-database/
+database/*
 valorant_database/
 ai_database/
 
