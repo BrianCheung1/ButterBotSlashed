@@ -1,9 +1,9 @@
 import os
+from datetime import datetime
 
 import discord
 from dotenv import load_dotenv
 from pymongo import MongoClient
-from datetime import datetime
 
 load_dotenv()
 MONGO_URL = os.getenv("ATLAS_URI")
@@ -737,6 +737,7 @@ def update_user_blackjack_stats(
     update_fields["$inc"]["blackjacks_played"] = 1
 
     collection.update_one({"_id": user.id}, update_fields)
+
 
 def update_user_roulette_stats(
     user: discord.User,

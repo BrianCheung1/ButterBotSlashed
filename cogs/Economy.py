@@ -1,38 +1,38 @@
+import asyncio
+import io
 import os
 import random
+from datetime import datetime, timedelta
 from typing import Optional
 
 import discord
 import matplotlib.pyplot as plt
-import io
 import numpy as np
-from discord import app_commands, Interaction, Member
+from discord import Interaction, Member, app_commands
 from discord.ext import commands, tasks
+from discord.ui import Button, View
 from dotenv import load_dotenv
 from pymongo import MongoClient
-from datetime import datetime, timedelta
+import time
+
+from utils.embeds import create_embed
 from utils.stats import (
     balance_of_player,
-    update_user_heist_stats,
-    update_user_duel_stats,
-    update_user_steal_stats,
-    update_user_mine_stats,
-    update_user_fish_stats,
-    mine_stats,
+    bank_stats,
     fish_stats,
     get_user_inventory,
-    bank_stats,
-    update_user_bank_stats,
-    update_balance,
-    update_user_highlow_stats,
-    update_user_roulette_stats,
+    mine_stats,
     roulette_stats,
+    update_balance,
+    update_user_bank_stats,
+    update_user_duel_stats,
+    update_user_fish_stats,
+    update_user_heist_stats,
+    update_user_highlow_stats,
+    update_user_mine_stats,
+    update_user_roulette_stats,
+    update_user_steal_stats,
 )
-from utils.embeds import create_embed
-from discord.ui import Button, View
-
-import asyncio
-
 
 load_dotenv()
 MONGO_URL = os.getenv("ATLAS_URI")
@@ -245,8 +245,8 @@ class Economy(commands.Cog):
             return
 
         # Proceed with stealing
-        wealth_factor = min(target_balance / 5000, 1.0)
-        success_chance = 0.25 + 0.50 * wealth_factor
+        wealth_factor = min(target_balance / 500000, 1.0)
+        success_chance = 0.50 + 0.25 * wealth_factor
         now = datetime.utcnow()
 
         success_messages = [
@@ -266,7 +266,20 @@ class Economy(commands.Cog):
         ]
 
         if random.random() < success_chance:
-            percent = random.uniform(0.05, 0.20)
+            # Define percent ranges and their weights
+            tiers = [
+                (0.05, 0.075),  # Common
+                (0.075, 0.10),  # Uncommon
+                (0.10, 0.15),  # Rare
+                (0.15, 0.20),  # Super rare
+            ]
+            weights = [70, 20, 7.5, 2.5]  # Adjust to taste — total = 100
+
+            # Choose a tier based on weight
+            low, high = random.choices(tiers, weights=weights, k=1)[0]
+
+            # Choose a percent within that tier
+            percent = random.uniform(low, high)
             stolen_amount = int(target_balance * percent)
 
             target_balance -= stolen_amount
@@ -1094,7 +1107,9 @@ class Economy(commands.Cog):
         for name, remaining in sorted_users.items():
             hours, remainder = divmod(remaining, 3600)
             minutes, seconds = divmod(remainder, 60)
-            field_value = f"{int(hours)}h {int(minutes)}m {int(seconds)}s"
+            # field_value = f"{int(hours)}h {int(minutes)}m {int(seconds)}s"
+            future_time = int(time.time()) + int(remaining)
+            field_value = f"<t:{future_time}:R>"
             embed.add_field(name=name, value=field_value, inline=False)
             count += 1
 

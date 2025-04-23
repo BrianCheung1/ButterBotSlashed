@@ -18,10 +18,10 @@ from utils.stats import (
     blackjack_stats,
     gamble_stats,
     slots_stats,
-    wordle_stats,
+    update_user_blackjack_stats,
     update_user_gamble_stats,
     update_user_slots_stats,
-    update_user_blackjack_stats,
+    wordle_stats,
 )
 
 load_dotenv()
@@ -956,7 +956,7 @@ def slots_helper(
     # 4a) 3-in-line
     for a, b, c in winning_lines:
         if board[a] == board[b] == board[c]:
-            payout_amount = amount * 2.5
+            payout_amount = amount * 2.75
             # embed.add_field(
             #     name="Result",
             #     value=f"3 in a line — You win ${payout_amount:,.2f}\nCurrent Balance: ${balance:,.2f}",

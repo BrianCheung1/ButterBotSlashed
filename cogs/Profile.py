@@ -9,8 +9,8 @@ from discord.ui import Button, View
 from dotenv import load_dotenv
 from pymongo import MongoClient
 
-from utils.stats import balance_of_player, all_stats, get_user_inventory
 from utils.embeds import create_embed
+from utils.stats import all_stats, balance_of_player, get_user_inventory
 
 load_dotenv()
 GAMES = os.getenv("GAMES")
