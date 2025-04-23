@@ -6,12 +6,13 @@ from collections import defaultdict
 from datetime import datetime
 from typing import Literal, Optional
 
+import aiosqlite
 import discord
 from discord import app_commands
 from discord.ext import commands, tasks
-import aiosqlite
 
 from utils.logging import send_error_to_support_channel
+from utils.stats import get_user_data
 
 GUILD_ID = 152954629993398272
 
@@ -156,14 +157,6 @@ class Development(commands.Cog):
         hours, remainder = divmod(remainder, 3600)
         minutes, seconds = divmod(remainder, 60)
         duration_formatted = f"{days}D:{hours}H:{minutes}M"
-
-        embed = discord.Embed(title=f"{self.bot.user.display_name} stats")
-        embed.add_field(
-            name="Ping", value=f"{round(self.bot.latency*1000)}ms", inline=True
-        )
-        embed.add_field(name="Total Servers", value=f"{guild_count}", inline=True)
-        embed.add_field(name="Total Members", value=f"{user_count}", inline=True)
-
         uptime = datetime.now() - self.bot.start_time
         hours, remainder = divmod(int(uptime.total_seconds()), 3600)
         minutes, seconds = divmod(remainder, 60)
@@ -224,13 +217,45 @@ class Development(commands.Cog):
             db_name = self.get_db_name(guild.id)
             try:
                 await self.modify_table_to_add_added_by(db_name)
-                updates.append(f"✅ Updated database for guild: **{guild.name}** ({guild.id})")
+                updates.append(
+                    f"✅ Updated database for guild: **{guild.name}** ({guild.id})"
+                )
             except Exception as e:
-                updates.append(f"❌ Failed to update database for guild: **{guild.name}** ({guild.id}). Error: {e}")
+                updates.append(
+                    f"❌ Failed to update database for guild: **{guild.name}** ({guild.id}). Error: {e}"
+                )
 
         # Send a final update message
         result_message = "\n".join(updates)
         await interaction.followup.send(f"Database Update Results:\n{result_message}")
+
+    @app_commands.command(
+        name="sync_all_users",
+        description="Sync stats for all users across all servers.",
+    )
+    @app_commands.check(is_owner_check)
+    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    async def sync_all_users(self, interaction: discord.Interaction):
+        """Loops through all guilds and members to sync their stats."""
+        await interaction.response.send_message("⏳ Syncing all users' stats...")
+
+        updated = 0
+        failed = 0
+
+        for guild in self.bot.guilds:
+            for member in guild.members:
+                if member.bot:
+                    continue
+                try:
+                    get_user_data(member)  # This handles sync/init logic
+                    updated += 1
+                except Exception as e:
+                    print(f"[❌] Failed to sync {member.display_name}: {e}")
+                    failed += 1
+
+        await interaction.followup.send(
+            f"✅ Synced stats for **{updated}** users\n❌ Failed for **{failed}** users"
+        )
 
     def get_db_name(self, guild_id):
         """Generate a unique database name based on the guild ID."""
@@ -287,6 +312,15 @@ class Development(commands.Cog):
     @my_background_task.before_loop
     async def before_my_task(self):
         await self.bot.wait_until_ready()
+
+    @commands.Cog.listener()
+    async def on_member_join(self, member: discord.Member):
+        """Ensure new member has a stat entry on join."""
+        try:
+            get_user_data(member)
+            print(f"[✅] Synced stats for new member: {member.display_name}")
+        except Exception as e:
+            print(f"[❌] Failed to sync stats for {member.display_name}: {e}")
 
 
 async def setup(bot: commands.Bot) -> None:

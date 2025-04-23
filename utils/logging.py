@@ -28,6 +28,7 @@ async def send_error_to_support_channel(
             await target_channel.send(
                 f"Error occurred in {interaction.guild.name} ({interaction.guild.id}):\n"
                 f"Command: `/{interaction.command.name}` triggered by {interaction.user.name} ({interaction.user.id})\n"
+                f"Error: {error}\n"
             )
             # Ping the admin user for feedback
             if admin_user:
@@ -78,3 +79,10 @@ async def send_commands_to_support_channel(
             )
     else:
         logger.error(f"Guild {target_guild_id} not found.")
+
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)

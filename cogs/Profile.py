@@ -9,7 +9,8 @@ from discord.ui import Button, View
 from dotenv import load_dotenv
 from pymongo import MongoClient
 
-from utils.stats import balance_of_player
+from utils.stats import balance_of_player, all_stats, get_user_inventory
+from utils.embeds import create_embed
 
 load_dotenv()
 GAMES = os.getenv("GAMES")
@@ -137,7 +138,125 @@ class Profile(commands.Cog):
         await interaction.response.defer()
         await interaction.followup.send(f"💳 {member.mention} has ${balance:,.2f}")
 
+    @app_commands.command(
+        name="game_stats", description="Shows full game and heist stats of a user"
+    )
+    async def game_stats(
+        self, interaction: discord.Interaction, member: Optional[discord.Member] = None
+    ):
+        member = member or interaction.user
+        await interaction.response.defer()
+        embed = await all_stats_embed(member)
+        await interaction.followup.send(embed=embed)
+
+    @app_commands.command(name="inventory", description="Shows inventory of user")
+    async def inventory(
+        self, interaction: discord.Interaction, member: Optional[discord.Member] = None
+    ):
+        member = member or interaction.user
+        await interaction.response.defer()
+        user_inventory = get_user_inventory(member)
+
+        if not user_inventory:
+            await interaction.followup.send(
+                f"{member.mention} has no items in their inventory."
+            )
+            return
+
+        embed = discord.Embed(
+            title=f"{member.name}'s Inventory", color=discord.Color.blue()
+        )
+        for item in user_inventory:
+            # Assuming each item is a dictionary with "name" and "quantity"
+            embed.add_field(
+                name=item["name"], value=f"Quantity: {item['quantity']}", inline=False
+            )
+
+        await interaction.followup.send(embed=embed)
+
 
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(Profile(bot))
     print("Profile is Loaded")
+
+
+async def all_stats_embed(member: discord.Member) -> discord.Embed:
+    stats = all_stats(member)
+
+    fields = [
+        (
+            "🎡 Roulette",
+            f"**Won:** {stats['roulette']['won']} | **Lost:** {stats['roulette']['lost']} | **Played:** {stats['roulette']['played']}\n"
+            f"**Amount Won:** ${stats['roulette']['total_winnings']:,} | **Amount Lost:** ${stats['roulette']['total_losses']:,}",
+            False,
+        ),
+        (
+            "🎲 Gamble",
+            f"**Won:** {stats['gamble']['won']} | **Lost:** {stats['gamble']['lost']} | **Played:** {stats['gamble']['played']}\n"
+            f"**Amount Won:** ${stats['gamble']['total_winnings']:,} | **Amount Lost:** ${stats['gamble']['total_losses']:,}",
+            False,
+        ),
+        (
+            "🃏 Blackjack",
+            f"**Won:** {stats['blackjack']['won']} | **Lost:** {stats['blackjack']['lost']} | **Played:** {stats['blackjack']['played']}\n"
+            f"**Amount Won:** ${stats['blackjack']['total_winnings']:,} | **Amount Lost:** ${stats['blackjack']['total_losses']:,}",
+            False,
+        ),
+        (
+            "🎰 Slots",
+            f"**Won:** {stats['slots']['won']} | **Lost:** {stats['slots']['lost']} | **Played:** {stats['slots']['played']}\n"
+            f"**Amount Won:** ${stats['slots']['total_winnings']:,} | **Amount Lost:** ${stats['slots']['total_losses']:,}",
+            False,
+        ),
+        (
+            "🧠 Wordle",
+            f"**Won:** {stats['wordle']['won']} | **Lost:** {stats['wordle']['lost']} | **Played:** {stats['wordle']['played']}",
+            False,
+        ),
+        (
+            "⚔️ Duel",
+            f"**Won:** {stats['duel']['won']} | **Lost:** {stats['duel']['lost']} | **Played:** {stats['duel']['tied']}",
+            False,
+        ),
+        (
+            "💼 Heists",
+            (
+                f"**Joined:** {stats['heist']['joined']} | **Won:** {stats['heist']['won']} | **Lost:** {stats['heist']['lost']}\n"
+                f"**Loot Gained:** ${stats['heist']['loot_gained']:,} | **Loot Lost:** ${stats['heist']['loot_lost']:,}\n"
+                f"**Backstabs:** {stats['heist']['backstabs']} | **Betrayed:** {stats['heist']['betrayed']}"
+            ),
+            False,
+        ),
+        (
+            "🕵️ Steals",
+            (
+                f"**Attempted:** {stats['steal']['attempted']} | **Successful:** {stats['steal']['successful']} | **Failed:** {stats['steal']['failed']}\n"
+                f"**Amount Stolen:** ${stats['steal']['amount_stolen']:,} | **Lost on Fail:** ${stats['steal']['amount_lost_to_failed_steals']:,}\n"
+                f"**Stolen by Others:** ${stats['steal']['amount_stolen_by_others']:,} | **Times Robbed:** {stats['steal']['times_stolen_from']}\n"
+                f"**Gained from Failed Steals:** ${stats['steal']['amount_gained_from_failed_steals']:,}"
+            ),
+            False,
+        ),
+        (
+            "⛏️ Mining",
+            (
+                f"**Level:** {stats['mining']['mining_level']}/99 | **XP:** {stats['mining']['mining_xp']:,} / {stats['mining']['next_level_xp']:,}\n"
+            ),
+            False,
+        ),
+        (
+            "🎣 Fishing",
+            (
+                f"**Level:** {stats['fishing']['fishing_level']}/99 | **XP:** {stats['fishing']['fishing_xp']:,} / {stats['fishing']['fishing_next_level_xp']:,}\n"
+            ),
+            False,
+        ),
+    ]
+
+    return create_embed(
+        title=f"{member.display_name}'s Full Stats",
+        description="📊 Here's a full breakdown of your activity!",
+        color=discord.Color.gold(),
+        fields=fields,
+        thumbnail=member.display_avatar.url,
+    )

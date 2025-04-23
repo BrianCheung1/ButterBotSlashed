@@ -22,7 +22,7 @@ class Valorant(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
         self.queue_manager = QueueManager()
-        self.db_folder = "valorant_database"
+        self.db_folder = "database/valorant"
         self.player_names = []
         self.player_tags = []
 
@@ -124,6 +124,7 @@ class Valorant(commands.Cog):
         await interaction.response.defer()
         api_url = f"https://api.henrikdev.xyz/valorant/v1/mmr-history/na/{name}/{tag}?api_key={VAL_KEY}"
         api_url2 = f"https://api.henrikdev.xyz/valorant/v1/mmr/na/{name}/{tag}?api_key={VAL_KEY}"
+        print(api_url2)
         response = requests.get(api_url)
         response2 = requests.get(api_url2)
 
@@ -178,17 +179,17 @@ class Valorant(commands.Cog):
             )
             embed.add_field(name="Games Won", value=wins, inline=True)
             embed.add_field(name="Games Lost", value=loses, inline=True)
-            embed.add_field(name="\u200B", value="\u200B")
+            embed.add_field(name="\u200b", value="\u200b")
             embed.add_field(name="Starting Rank", value=starting_rank, inline=True)
             embed.add_field(
                 name="Starting RR", value=f"{starting_rr%100}/100", inline=True
             )
-            embed.add_field(name="\u200B", value="\u200B")
+            embed.add_field(name="\u200b", value="\u200b")
             embed.add_field(name="Current Rank", value=current_rank, inline=True)
             embed.add_field(
                 name="Current RR", value=f"{current_rr%100}/100", inline=True
             )
-            embed.add_field(name="\u200B", value="\u200B")
+            embed.add_field(name="\u200b", value="\u200b")
             mmr_display = f"+{mmr}" if mmr > 0 else f"{mmr}"
             embed.add_field(name="RR Change", value=mmr_display, inline=False)
             embed.timestamp = datetime.now()
@@ -619,11 +620,7 @@ class Valorant(commands.Cog):
         }
 
         for match in matches:
-            if (
-                match.get("meta", {}).get("season", {}).get("short", "Unknown")
-                == season
-            ):
-                stats = self.update_match_stats(stats, match, mmr_history)
+            stats = self.update_match_stats(stats, match, mmr_history)
 
         return stats
 
@@ -949,6 +946,7 @@ class Valorant(commands.Cog):
                 if active_episode and active_act
                 else "No active episode or act found"
             )
+            print(result)
             return result
         else:
             return error_check + " in current_season"
@@ -1287,7 +1285,7 @@ class MatchSelector(discord.ui.Select):
             adjusted_date = last_match_date - timedelta(hours=4)
             result_date_str = adjusted_date.strftime("%A, %B %d, %Y %I:%M %p")
 
-            if isinstance(match_id, str) and match_season == current_season:
+            if isinstance(match_id, str):
                 option = discord.SelectOption(
                     label=f"{match_map} - {result_date_str}", value=str(match_id)
                 )

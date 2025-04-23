@@ -2,9 +2,14 @@ import logging
 
 import discord
 from discord import Forbidden, NotFound
-from discord.app_commands import (AppCommandError, CheckFailure,
-                                  CommandInvokeError, CommandNotFound,
-                                  CommandOnCooldown, MissingPermissions)
+from discord.app_commands import (
+    AppCommandError,
+    CheckFailure,
+    CommandInvokeError,
+    CommandNotFound,
+    CommandOnCooldown,
+    MissingPermissions,
+)
 from discord.ext import commands
 
 from utils.logging import send_error_to_support_channel

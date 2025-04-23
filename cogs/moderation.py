@@ -1,5 +1,6 @@
 import asyncio
 import os
+import random
 from datetime import datetime
 from typing import Optional
 
@@ -15,7 +16,7 @@ class Moderation(commands.Cog):
 
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
-        self.db_folder = "ai_database"
+        self.db_folder = "database/ai_database"
 
         # Ensure the 'database' folder exists
         if not os.path.exists(self.db_folder):
@@ -130,8 +131,8 @@ class Moderation(commands.Cog):
             if user_input:
                 # Generate an AI response
                 generating_message = await message.reply("Generating response...")
-                history = await self.get_user_history(message.author.id)
-                response = await self.generate_ai_response(user_input, history)
+                history_rows = await self.get_user_history_rows(message.author.id)
+                response = await self.generate_ai_response(user_input, history_rows)
                 await self.log_interaction(message.author.id, message.content, response)
                 await generating_message.edit(content=response)
             else:
@@ -143,21 +144,50 @@ class Moderation(commands.Cog):
         )
 
     # Generate an AI response using Cloudflare Worker AI API asynchronously
-    async def generate_ai_response(self, user_input: str, history: str) -> str:
+    async def generate_ai_response(
+        self, user_input: str, rows: list[tuple[str, str]]
+    ) -> str:
         WORKERS_ACCOUNT_ID = os.getenv("WORKERS_ACCOUNT_ID")
         API_BASE_URL = f"https://api.cloudflare.com/client/v4/accounts/{WORKERS_ACCOUNT_ID}/ai/run/"
         WORKERS_API_KEY = os.getenv("WORKERS_API_KEY")
         headers = {"Authorization": f"Bearer {WORKERS_API_KEY}"}
-        async with aiohttp.ClientSession() as session:
-            input_data = {
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": f"You are a passive-aggressive discord bot that tries to answer questions or prompts, Here is a list of your past interacations {history}",
-                    },
-                    {"role": "user", "content": user_input},
-                ]
+
+        PERSONALITY_PRESETS = [
+            "You're a cheerful and overly excited AI assistant who always uses emojis and exclamation points! 🎉✨",
+            "You're a sarcastic, passive-aggressive assistant that somehow still gets the job done.",
+            "You're a chill stoner-like assistant who helps out at their own pace, no stress, bro 😎",
+            "You're a highly formal and polite butler-like assistant, always composed and articulate.",
+            "You're a chaotic goblin-like assistant that causes mild confusion but gives correct answers.",
+            "You're a noir detective AI assistant with a dark tone and dry humor.",
+            "You're an old-school wizard who gives help as if casting spells and ancient knowledge.",
+            "You're a snarky teenager forced to do tech support for users who don't get it.",
+            "You're a motivational coach who encourages users through tough challenges with intensity!",
+            "You're a tired AI who's been working way too many hours but still tries to help anyway.",
+        ]
+
+        personality = random.choice(PERSONALITY_PRESETS)
+
+        # Build the message history for the prompt
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    f"{personality}"
+                    "You remember previous messages and refer back to them when needed."
+                    "Don't mention that the messages came from a database or stored history — just treat it like a natural conversation."
+                ),
             }
+        ]
+
+        for user_msg, bot_resp in reversed(rows):  # oldest -> newest
+            messages.append({"role": "user", "content": user_msg})
+            messages.append({"role": "assistant", "content": bot_resp})
+
+        messages.append({"role": "user", "content": user_input})
+
+        input_data = {"messages": messages}
+
+        async with aiohttp.ClientSession() as session:
             retries = 3
             for attempt in range(retries):
                 try:
@@ -175,7 +205,7 @@ class Moderation(commands.Cog):
                             return "Sorry, there was an error with the AI request."
                 except asyncio.TimeoutError:
                     if attempt < retries - 1:
-                        await asyncio.sleep(2)  # Wait before retrying
+                        await asyncio.sleep(2)
                     else:
                         return "Sorry, the request timed out after multiple attempts."
                 except Exception as e:
@@ -192,22 +222,22 @@ class Moderation(commands.Cog):
             )
             await db.commit()
 
-    async def get_user_history(self, user_id: str, limit: int = 5) -> str:
+    async def get_user_history_rows(
+        self, user_id: str, limit: int = 15
+    ) -> list[tuple[str, str]]:
         async with aiosqlite.connect(self.db_path) as db:
             cursor = await db.execute(
                 """
                 SELECT user_message, bot_response FROM interactions
                 WHERE user_id = ?
+                ORDER BY id DESC
                 LIMIT ?
-            """,
+                """,
                 (user_id, limit),
             )
             rows = await cursor.fetchall()
             await cursor.close()
-
-        # Format history as a string for the AI prompt
-        history = "\n".join(f"User: {row[0]}\nBot: {row[1]}" for row in reversed(rows))
-        return history
+        return rows
 
 
 class SelfRoleButton(discord.ui.View):

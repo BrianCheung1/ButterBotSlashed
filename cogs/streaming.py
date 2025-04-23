@@ -10,13 +10,12 @@ import tmdbsimple as tmdb
 from discord import app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
-from plexapi.server import PlexServer
 
 load_dotenv()
 tmdb.API_KEY = os.getenv("TMDB")
-PLEX_URL = os.getenv("PLEX_URL")
-PLEX_TOKEN = os.getenv("PLEX_TOKEN")
-plex = PlexServer(PLEX_URL, PLEX_TOKEN)
+# PLEX_URL = os.getenv("PLEX_URL")
+# PLEX_TOKEN = os.getenv("PLEX_TOKEN")
+# plex = PlexServer(PLEX_URL, PLEX_TOKEN)
 
 
 class Streaming(commands.Cog):
@@ -294,7 +293,7 @@ class Streaming(commands.Cog):
 
             for entry in link_list:
                 # Check if entry is an IMDb link
-                if re.match(r"^https?://(www\.)?imdb\.com/title/tt\d+/", entry):
+                if re.match(r"^https?://(www\.)?(m\.)?imdb\.com/title/tt\d+/", entry):
                     movie_name = await self.get_movie_name_from_imdb(entry)
                     movie_link = entry
                 # Check if entry is a TMDb link

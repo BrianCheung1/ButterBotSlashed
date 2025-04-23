@@ -17,18 +17,11 @@ class YTDLSource:
 
         ydl_opts = {
             "format": "bestaudio/best",
-            "extractaudio": True,
-            "audioquality": 1,
-            "outtmpl": "downloads/%(id)s.%(ext)s",
-            "restrictfilenames": True,
             "quiet": True,
-            "logtostderr": False,
-            "nocheckcertificate": True,
-            "default_search": "ytsearch3",
-            "source_address": None,
-            "noplaylist": True,
-            "geo_bypass": True,  # Try bypassing regional restrictions
-            "sleep_interval": 1,  # Reduce sleep time between requests
+            "no_warnings": True,
+            "default_search": "ytsearch3",  # Search top 5 results directly
+            "noplaylist": True,  # Ignore playlists
+            "geo_bypass": True,  # Bypass regional restrictions
         }
 
         if stream:
@@ -94,10 +87,11 @@ class Music(commands.Cog):
         # Create an embed with the top 5 songs for the user to choose from
         # Create an embed with the top 5 songs
         embed = discord.Embed(
-            title="Top 5 Songs for Your Search", color=discord.Color.blue()
+            title="Top 3 Songs for Your Search", color=discord.Color.blue()
         )
         reactions = ["1️⃣", "2️⃣", "3️⃣"]
         for idx, player in enumerate(player_results[:3], 1):
+            print(player)
             embed.add_field(
                 name=f"{reactions[idx - 1]} {player['title']}",
                 value=f"[{player['webpage_url']}]",
