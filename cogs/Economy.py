@@ -833,24 +833,51 @@ class Economy(commands.Cog):
         await msg.edit(content=f"🎮 **Duel Complete!**\n\n{outcome_text}", embed=embed)
 
     @app_commands.command(name="deposit", description="Deposit money into the bank")
+    @app_commands.describe(
+        amount="Amount to deposit", action="Choose 'all' to deposit as much as possible"
+    )
+    @app_commands.choices(
+        action=[
+            app_commands.Choice(name="All", value="all"),
+        ]
+    )
     async def deposit(
         self,
         interaction: discord.Interaction,
-        amount: app_commands.Range[int, 1, None],
+        amount: Optional[app_commands.Range[int, 1, None]] = None,
+        action: Optional[app_commands.Choice[str]] = None,
     ):
         await interaction.response.defer(thinking=True)
 
-        # Get wallet and bank balance
         _, balance = balance_of_player(interaction.user)
         bank_balance = bank_stats(interaction.user)
 
-        if amount > balance:
+        if action and action.value == "all":
+            available_space = 1_000_000 - bank_balance
+            if available_space <= 0:
+                await interaction.followup.send(
+                    f"{interaction.user.mention}, your bank is already full."
+                )
+                return
+            amount = min(balance, available_space)
+            if amount == 0:
+                await interaction.followup.send(
+                    f"{interaction.user.mention}, you don't have any money to deposit."
+                )
+                return
+        elif amount is None:
             await interaction.followup.send(
-                f"{interaction.user.mention}, you dont have enough money to deposit."
+                f"{interaction.user.mention}, please provide an amount or choose 'all'."
             )
             return
 
-        if amount + bank_balance > 1000000:
+        if amount > balance:
+            await interaction.followup.send(
+                f"{interaction.user.mention}, you don't have enough money to deposit."
+            )
+            return
+
+        if amount + bank_balance > 1_000_000:
             await interaction.followup.send(
                 f"{interaction.user.mention}, you can't have more than $1,000,000 in the bank."
             )
@@ -863,23 +890,49 @@ class Economy(commands.Cog):
         )
 
     @app_commands.command(name="withdraw", description="Withdraw money from the bank")
+    @app_commands.describe(
+        amount="Amount to withdraw",
+        action="Choose 'all' to withdraw as much as possible",
+    )
+    @app_commands.choices(
+        action=[
+            app_commands.Choice(name="All", value="all"),
+        ]
+    )
     async def withdraw(
         self,
         interaction: discord.Interaction,
-        amount: app_commands.Range[int, 1, None],
+        amount: Optional[app_commands.Range[int, 1, None]] = None,
+        action: Optional[app_commands.Choice[str]] = None,
     ):
         await interaction.response.defer(thinking=True)
 
-        # Get wallet and bank balance
         _, balance = balance_of_player(interaction.user)
         bank_balance = bank_stats(interaction.user)
 
-        if amount > bank_balance:
+        # Handle 'all' option
+        if action and action.value == "all":
+            if bank_balance <= 0:
+                await interaction.followup.send(
+                    f"{interaction.user.mention}, your bank is empty."
+                )
+                return
+            amount = bank_balance
+
+        elif amount is None:
             await interaction.followup.send(
-                f"{interaction.user.mention}, you dont have enough money in the bank to withdraw."
+                f"{interaction.user.mention}, please provide an amount or choose 'all'."
             )
             return
 
+        # Check if user has enough in bank
+        if amount > bank_balance:
+            await interaction.followup.send(
+                f"{interaction.user.mention}, you don't have enough money in the bank to withdraw."
+            )
+            return
+
+        # Withdraw and update balances
         new_balance = update_user_bank_stats(interaction.user, -amount)
         update_balance(interaction.user, balance + amount)
 
@@ -887,13 +940,20 @@ class Economy(commands.Cog):
             f"Withdrew ${amount:,} from the bank. Current Bank Balance: ${new_balance:,}"
         )
 
-    @app_commands.command(name="bank_balance", description="Check your bank balance")
-    async def bank_balance(self, interaction: discord.Interaction):
+    @app_commands.command(
+        name="bank_balance", description="Check a user's bank balance"
+    )
+    @app_commands.describe(member="The user whose bank balance you want to check")
+    async def bank_balance(
+        self, interaction: discord.Interaction, member: Optional[discord.Member] = None
+    ):
         await interaction.response.defer(thinking=True)
 
-        bank_balance = bank_stats(interaction.user)
+        target = member or interaction.user
+        bank_balance = bank_stats(target)
+
         await interaction.followup.send(
-            f"{interaction.user.mention}, your current bank balance is ${bank_balance:,}."
+            f"{target.mention}, your current bank balance is ${bank_balance:,}."
         )
 
     @app_commands.command(name="roulette", description="Bet on Red, Black, or Green!")
@@ -977,6 +1037,48 @@ class Economy(commands.Cog):
                 view=RPSView(challenger, None, amount, is_bot=True),
             )
 
+    @app_commands.command(name="horserace", description="Start a horse race!")
+    @app_commands.describe(
+        horses="Number of horses (2-5 recommended)",
+        length="Track length (default is 10)",
+    )
+    async def horserace(
+        self, interaction: discord.Interaction, horses: int = 3, length: int = 10
+    ):
+        if not (2 <= horses <= 5):
+            await interaction.response.send_message(
+                "Please choose between 2 and 5 horses."
+            )
+            return
+
+        await interaction.response.defer()
+        horse_names = [f"Horse {chr(65+i)}" for i in range(horses)]
+        positions = [0 for _ in range(horses)]
+
+        def build_track():
+            track = "🏁" + ("-" * length) + "\n"
+            for i, pos in enumerate(positions):
+                blocks = "🟩" * pos + "⬜" * (length - pos)
+                track += f"🐴 {chr(65+i)}: {blocks}\n"
+            return track
+
+        message = await interaction.followup.send(
+            f"Race starting...\n\n{build_track()}"
+        )
+
+        winner = None
+        while not winner:
+            await asyncio.sleep(1)
+            for i in range(horses):
+                positions[i] += random.choice([0, 1])  # slow but steady
+                if positions[i] >= length:
+                    winner = i
+            await message.edit(content=f"{build_track()}")
+
+        await message.edit(
+            content=f"{build_track()}\n🏆 **Horse {chr(65+winner)} wins!**"
+        )
+
     # Task to add 5% interest to everyone's bank account
     @tasks.loop(hours=6)  # this will run the task every 6 hours
     async def add_interest(self):
@@ -1019,70 +1121,75 @@ class Economy(commands.Cog):
     ):
         await interaction.response.defer(thinking=True)
 
-        members = interaction.guild.members
-        member_ids = [m.id for m in members]
-        id_to_name = {m.id: m.nick or m.name for m in members}
+        async def generate_pages():
+            members = interaction.guild.members
+            member_ids = [m.id for m in members]
+            id_to_name = {m.id: m.nick or m.name for m in members}
 
-        docs = collection.find({"_id": {"$in": member_ids}})
-        top_members = {}
+            docs = collection.find({"_id": {"$in": member_ids}})
+            top_members = {}
 
-        for doc in docs:
-            uid = doc["_id"]
-            if type.value == "balance":
-                value = doc.get("balance", 0)
-            elif type.value == "fishing":
-                value = doc.get("fishing_level", 0)
-                if value == 0:  # Skip members with no fishing level
-                    continue
-            elif type.value == "bank":
-                value = doc.get("bank", 0)
-                if value == 0:
-                    continue
-            else:
-                value = doc.get("mining_level", 0)
-                if value == 0:  # Skip members with no mining level
-                    continue
+            for doc in docs:
+                uid = doc["_id"]
+                if type.value == "balance":
+                    value = doc.get("balance", 0)
+                elif type.value == "fishing":
+                    value = doc.get("fishing_level", 0)
+                    if value == 0:
+                        continue
+                elif type.value == "bank":
+                    value = doc.get("bank", 0)
+                    if value == 0:
+                        continue
+                else:
+                    value = doc.get("mining_level", 0)
+                    if value == 0:
+                        continue
 
-            name = id_to_name.get(uid)
-            if name:
-                top_members[name] = value
+                name = id_to_name.get(uid)
+                if name:
+                    top_members[name] = value
 
-        sorted_members = dict(
-            sorted(top_members.items(), key=lambda item: item[1], reverse=True)
-        )
-
-        pages = []
-        page_count = 1
-        count = 0
-        title = f"{interaction.guild.name} {'Wealth' if type.value == 'balance' else 'Top ' + type.value.capitalize()} Leaderboard"
-        embed = discord.Embed(title=title)
-        embed.set_footer(
-            text=f"Page {page_count}", icon_url=interaction.user.display_avatar
-        )
-
-        for name, value in sorted_members.items():
-            field_value = (
-                f"${value:,.2f}"
-                if type.value in ["balance", "bank"]
-                else f"Level {value}/99"
+            sorted_members = dict(
+                sorted(top_members.items(), key=lambda item: item[1], reverse=True)
             )
-            embed.add_field(
-                name=f"{count + 1}. {name}", value=field_value, inline=False
-            )
-            count += 1
 
-            if count % 10 == 0:
-                pages.append(embed)
-                page_count += 1
-                embed = discord.Embed(title=title)
-                embed.set_footer(
-                    text=f"Page {page_count}", icon_url=interaction.user.display_avatar
+            pages = []
+            page_count = 1
+            count = 0
+            title = f"{interaction.guild.name} {'Wealth' if type.value == 'balance' else 'Top ' + type.value.capitalize()} Leaderboard"
+            embed = discord.Embed(title=title)
+            embed.set_footer(
+                text=f"Page {page_count}", icon_url=interaction.user.display_avatar
+            )
+
+            for name, value in sorted_members.items():
+                field_value = (
+                    f"${value:,.2f}"
+                    if type.value in ["balance", "bank"]
+                    else f"Level {value}/99"
                 )
+                embed.add_field(
+                    name=f"{count + 1}. {name}", value=field_value, inline=False
+                )
+                count += 1
 
-        if count % 10 != 0:
-            pages.append(embed)
+                if count % 10 == 0:
+                    pages.append(embed)
+                    page_count += 1
+                    embed = discord.Embed(title=title)
+                    embed.set_footer(
+                        text=f"Page {page_count}",
+                        icon_url=interaction.user.display_avatar,
+                    )
 
-        view = LeaderboardButton(interaction, pages)
+            if count % 10 != 0:
+                pages.append(embed)
+
+            return pages
+
+        pages = await generate_pages()
+        view = LeaderboardButton(interaction, pages, refresh_func=generate_pages)
         await interaction.followup.send(embed=pages[0], view=view)
 
     @app_commands.command(
@@ -1147,47 +1254,17 @@ class Economy(commands.Cog):
                 )
         if count % 10 != 0:
             pages.append(embed)
-        view = LeaderboardButton(interaction, pages)
+        view = StealStatusButton(interaction, pages)
         await interaction.followup.send(embed=pages[0], view=view)
 
 
-class StealCooldownView(discord.ui.View):
-    def __init__(self, pages):
-        super().__init__(timeout=None)
-        self.pages = pages
-        self.current_page = 0
-
-    async def update_message(self, interaction):
-        embed = self.pages[self.current_page]
-        for i, child in enumerate(self.children):
-            if isinstance(child, discord.ui.Button):
-                if child.custom_id == "prev":
-                    child.disabled = self.current_page == 0
-                elif child.custom_id == "next":
-                    child.disabled = self.current_page == len(self.pages) - 1
-        await interaction.response.edit_message(embed=embed, view=self)
-
-    @discord.ui.button(label="⏮️ Prev", style=discord.ButtonStyle.grey, custom_id="prev")
-    async def previous(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ):
-        if self.current_page > 0:
-            self.current_page -= 1
-            await self.update_message(interaction)
-
-    @discord.ui.button(label="⏭️ Next", style=discord.ButtonStyle.grey, custom_id="next")
-    async def next(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if self.current_page < len(self.pages) - 1:
-            self.current_page += 1
-            await self.update_message(interaction)
-
-
-class LeaderboardButton(discord.ui.View):
+class StealStatusButton(discord.ui.View):
     def __init__(self, interaction: discord.Interaction, pages: list):
         super().__init__(timeout=None)
         self.interaction = interaction
         self.pages = pages
         self.count = 0
+        self.last_refresh_time = None  # Store the last refresh time
 
         # Disable Previous Page by default (since we're on page 0)
         self.prev_page.disabled = True
@@ -1219,6 +1296,144 @@ class LeaderboardButton(discord.ui.View):
             self.next_page.disabled = True
 
         await interaction.response.edit_message(embed=self.pages[self.count], view=self)
+
+    @discord.ui.button(label="Refresh", style=discord.ButtonStyle.green)
+    async def refresh_button(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        current_time = datetime.utcnow()
+
+        # Check if 30 seconds have passed since last refresh
+        if (
+            self.last_refresh_time
+            and (current_time - self.last_refresh_time).total_seconds() < 30
+        ):
+            await interaction.response.send_message(
+                "You must wait 30 seconds before refreshing again.", ephemeral=True
+            )
+            return
+
+        # Update the last refresh time
+        self.last_refresh_time = current_time
+
+        # Re-fetch the cooldown data and create new embed pages
+        now = datetime.utcnow()
+        cooldown_seconds = 21600  # 8 hours
+
+        members = interaction.guild.members
+        member_ids = [m.id for m in members]
+        id_to_name = {m.id: m.nick or m.name for m in members}
+
+        cursor = collection.find({"last_stolen": {"$ne": None}})
+        users_on_cooldown = {}
+
+        for doc in cursor:
+            uid = doc["_id"]
+            last_stolen = doc["last_stolen"]
+            elapsed = now - last_stolen
+            remaining = cooldown_seconds - elapsed.total_seconds()
+
+            if remaining > 0:
+                name = id_to_name.get(uid)
+                users_on_cooldown[name] = remaining
+
+        if not users_on_cooldown:
+            await interaction.response.edit_message(
+                content="🎉 No one is on cooldown. Steal away!", embed=None, view=self
+            )
+            return
+
+        sorted_users = dict(
+            sorted(users_on_cooldown.items(), key=lambda item: item[1], reverse=False)
+        )
+
+        pages = []
+        page_count = 1
+        count = 0
+        title = f"{interaction.guild.name} Steal Cooldown Status"
+        embed = discord.Embed(title=title)
+        embed.set_footer(
+            text=f"Page {page_count}", icon_url=interaction.user.display_avatar
+        )
+        embed.description = "Users with active steal protection cooldowns:\n"
+        for name, remaining in sorted_users.items():
+            hours, remainder = divmod(remaining, 3600)
+            minutes, seconds = divmod(remainder, 60)
+            future_time = int(time.time()) + int(remaining)
+            field_value = f"<t:{future_time}:R>"
+            embed.add_field(name=name, value=field_value, inline=False)
+            count += 1
+
+            if count % 10 == 0:
+                pages.append(embed)
+                page_count += 1
+                embed = discord.Embed(title=title)
+                embed.set_footer(
+                    text=f"Page {page_count}", icon_url=interaction.user.display_avatar
+                )
+        if count % 10 != 0:
+            pages.append(embed)
+
+        await interaction.response.edit_message(embed=pages[0], view=self)
+
+
+class LeaderboardButton(discord.ui.View):
+    def __init__(self, interaction: discord.Interaction, pages: list, refresh_func):
+        super().__init__(timeout=None)
+        self.interaction = interaction
+        self.pages = pages
+        self.refresh_func = refresh_func
+        self.count = 0
+
+        self.prev_page.disabled = True
+        if len(pages) <= 1:
+            self.next_page.disabled = True
+
+    @discord.ui.button(label="⬅️ Previous Page", style=discord.ButtonStyle.red)
+    async def prev_page(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        self.count -= 1
+        self.next_page.disabled = False
+        if self.count <= 0:
+            self.prev_page.disabled = True
+        await interaction.response.edit_message(embed=self.pages[self.count], view=self)
+
+    @discord.ui.button(label="➡️ Next Page", style=discord.ButtonStyle.red)
+    async def next_page(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        self.count += 1
+        self.prev_page.disabled = False
+        if self.count >= len(self.pages) - 1:
+            self.next_page.disabled = True
+        await interaction.response.edit_message(embed=self.pages[self.count], view=self)
+
+    @discord.ui.button(label="🔄 Refresh", style=discord.ButtonStyle.green)
+    async def refresh(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        button.disabled = True
+        original_label = button.label
+        button.label = "Refreshing..."
+        await interaction.response.edit_message(embed=self.pages[self.count], view=self)
+
+        try:
+            self.pages = await self.refresh_func()
+            self.count = 0
+            self.prev_page.disabled = True
+            self.next_page.disabled = len(self.pages) <= 1
+            button.label = original_label
+            await interaction.edit_original_response(embed=self.pages[0], view=self)
+        except Exception as e:
+            await interaction.followup.send(f"Refresh failed: {e}", ephemeral=True)
+
+        await asyncio.sleep(30)
+        button.disabled = False
+        try:
+            await interaction.edit_original_response(view=self)
+        except discord.NotFound:
+            pass
 
 
 class HeistButtonView(discord.ui.View):
@@ -1593,13 +1808,28 @@ async def run_mining_logic(user: discord.User) -> tuple[str, int, int, int, int,
         mining_result = f"epic loot: {random.choice(epic_ores)}, {random.choice(rare_ores)}, {random.choice(uncommon_ores)}, {random.choice(common_ores)}, and {random.choice(common_blocks)}"
 
     inventory = get_user_inventory(user)  # returns dict[str, dict]
-    pickaxe_types = ["wood", "stone", "iron", "gold", "diamond", "netherite"]
+    pickaxe_types = [
+        "wood",
+        "stone",
+        "copper",
+        "iron",
+        "emerald",
+        "gold",
+        "ruby",
+        "diamond",
+        "amethyst",
+        "netherite",
+    ]
     PICKAXE_BONUSES = {
         "wood": 0.00,
         "stone": 0.10,
+        "copper": 0.25,
         "iron": 1,
+        "emerald": 1.5,
         "gold": 2.5,
+        "ruby": 3.5,
         "diamond": 5,
+        "amethyst": 7.5,
         "netherite": 10,
     }
 
@@ -1816,13 +2046,28 @@ async def run_fishing_logic(
         )
 
     inventory = get_user_inventory(user)  # returns dict[str, dict]
-    fishing_rod_types = ["wood", "stone", "iron", "gold", "diamond", "netherite"]
+    fishing_rod_types = [
+        "wood",
+        "stone",
+        "copper",
+        "iron",
+        "emerald",
+        "gold",
+        "ruby",
+        "diamond",
+        "amethyst",
+        "netherite",
+    ]
     FISHING_ROD_BONUSES = {
         "wood": 0.00,
         "stone": 0.10,
+        "copper": 0.25,
         "iron": 1,
+        "emerald": 1.5,
         "gold": 2.5,
+        "ruby": 3.5,
         "diamond": 5,
+        "amethyst": 7.5,
         "netherite": 10,
     }
 

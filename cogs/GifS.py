@@ -4,7 +4,7 @@ import random
 
 import discord
 import requests
-from discord import app_commands
+from discord import Interaction, Member, app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
 
@@ -56,33 +56,60 @@ class Gifs(commands.Cog):
         else:
             await interaction.response.send_message("Emoji not in server")
 
+    # Command to roast a member
     @app_commands.command(
-        name="random_emoji", description="Button to show random emojis in the server"
+        name="roast", description="Roast someone with text and a GIF!"
     )
-    async def random_emoji(self, interaction: discord.Interaction):
-        view = Counter()
+    @app_commands.describe(
+        member="The member you want to roast",
+    )
+    async def roast(
+        self,
+        interaction: discord.Interaction,
+        member: discord.Member,
+    ):
+        # Get the roast text and GIF
+        roast_text = get_random_roast()
+        roast_gif_url = get_random_roast_gif()
 
-        await interaction.response.send_message(
-            "Click the button to start the process", view=view
+        # Create embed message
+        embed = discord.Embed(
+            description=roast_text,
+            color=discord.Color.red(),
         )
-        await view.wait()
+        embed.set_thumbnail(url=member.avatar.url)
+
+        if roast_gif_url:
+            embed.set_image(url=roast_gif_url)
+
+        # Send the embed with roast message
+        await interaction.response.send_message(
+            content=f"{member.mention} Got Roasted!", embed=embed
+        )
 
 
-class Counter(discord.ui.View):
-    # Define the actual button
-    # When pressed, this displays a random emoji in the guild.
-    # note: The name of the function does not matter to the library
-    @discord.ui.button(label="Random Emoji", style=discord.ButtonStyle.red)
-    async def emoji(self, interaction: discord.Interaction, button: discord.ui.Button):
-        emoji_list = interaction.guild.emojis
-        # number = int(button.label) if button.label else 0
-        # if number + 1 >= 10:
-        #     button.style = discord.ButtonStyle.green
-        #     button.disabled = True
-        # button.label = "Random Emoji"
+def get_random_roast():
+    response = requests.get(
+        "https://evilinsult.com/generate_insult.php?lang=en&type=json"
+    )
+    if response.status_code == 200:
+        return response.json().get(
+            "insult", "You are the reason we have instructions on shampoo bottles."
+        )
+    return "You are so slow, it took you 3 hours to watch '60 Minutes'."
 
-        # Make sure to update the message with our updated selves
-        await interaction.response.edit_message(content=random.choice(emoji_list))
+
+# Fetch a random roast GIF from Tenor
+def get_random_roast_gif():
+    url = f"https://tenor.googleapis.com/v2/search?q=roasted&key={KEY}&client_key=butter&limit=20"  # Get multiple results
+    response = requests.get(url).json()
+
+    if response.get("results"):
+        # Randomly select a GIF from the search results
+        random_gif = random.choice(response["results"])
+        return random_gif["media_formats"]["gif"]["url"]
+
+    return None
 
 
 async def setup(bot: commands.Bot) -> None:

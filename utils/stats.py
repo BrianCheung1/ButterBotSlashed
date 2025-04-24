@@ -556,7 +556,12 @@ def update_user_highlow_stats(
 
 
 def add_item_to_inventory(
-    user, item_name, quantity=1, rarity="common", level_required=1, type="tool"
+    user,
+    item_name,
+    quantity=1,
+    rarity="common",
+    level_required=1,
+    type="tool",
 ):
     # Fetch user data from the database
     user_data = get_user_data(user)
@@ -649,38 +654,54 @@ def get_user_inventory(user: discord.Member) -> set[str]:
 
 
 def reward_player_for_level_up(user: discord.User, level, type="mining"):
-    message = ""  # Final return message
+    message = ""
     milestone_messages = []
 
-    # Define milestone rewards
+    # Tool milestone rewards
     milestone_rewards = {
+        0: "Wood",
         20: "Stone",
+        30: "Copper",
         40: "Iron",
+        50: "Emerald",
         60: "Gold",
+        70: "Ruby",
         80: "Diamond",
-        99: "netherite",
+        90: "Amethyst",
+        99: "Netherite",
     }
 
+    rarity_map = {
+        "Wood": "common",
+        "Stone": "uncommon",
+        "Copper": "uncommon",
+        "Iron": "rare",
+        "Emerald": "rare",
+        "Gold": "epic",
+        "Ruby": "epic",
+        "Diamond": "legendary",
+        "Amethyst": "legendary",
+        "Netherite": "netherite",
+    }
+
+    inventory = get_user_inventory(user)
+
+    # Tool rewards
     for milestone_level, name in milestone_rewards.items():
         if level >= milestone_level:
-            # Build the item name
             tool_name = f"{name} Pickaxe" if type == "mining" else f"{name} Fishing Rod"
-
-            # Check if the user already has this tool
-
-            inventory = get_user_inventory(user)
             if tool_name not in inventory:
-                rarity_map = {
-                    "Stone": "uncommon",
-                    "Iron": "rare",
-                    "Gold": "epic",
-                    "Diamond": "legendary",
-                    "netherite": "netherite",
-                }
                 reward_msg = add_item_to_inventory(
                     user, tool_name, 1, rarity_map[name], milestone_level, "tool"
                 )
                 milestone_messages.append(reward_msg)
+
+    # Extra reward every 10 levels (excluding levels with pickaxes)
+    for l in range(30, level + 1, 10):
+        if l not in milestone_rewards:
+            crate_name = "Mystery Crate"
+            reward_msg = add_item_to_inventory(user, crate_name, 1, "rare", l, "crate")
+            milestone_messages.append(f"🎁 {crate_name} awarded at level {l}!")
 
     if milestone_messages:
         message = "\n".join(milestone_messages)

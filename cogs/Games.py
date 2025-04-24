@@ -333,20 +333,6 @@ class Games(commands.Cog):
         view = BlackjackButton(dealer_cards, player_cards, embed, interaction, amount)
         await interaction.followup.send(embed=embed, view=view)
 
-    @app_commands.command(
-        name="fight", description="Fight against another player or a bot"
-    )
-    async def fight(
-        self, interaction: discord.Interaction, member: Optional[discord.Member] = None
-    ):
-        if not member:
-            member = self.bot.user
-        view = FightButton(interaction, member)
-        content = f"It is {interaction.user.mention} turn"
-        await interaction.response.send_message(
-            embed=fight_helper(interaction, member), content=content, view=view
-        )
-
     @app_commands.command(name="slots", description="Spins a slot machine")
     async def slot(
         self,
@@ -820,102 +806,86 @@ class SlotsButton(discord.ui.View):
 
 
 def gamble_helper(interaction: discord.Interaction, amount: Optional[int], action):
+    if amount is None and not action:
+        return discord.Embed(title="Missing amount or action")
+
     prev_balance, balance = balance_of_player(interaction.user)
-    gambles_won, gambles_lost, gambles_played, total_winnings, total_losses = (
-        gamble_stats(interaction.user)
-    )
-    gambles_played += 1
-    win_text = ""
+    gambles_won, gambles_lost, gambles_played, *_ = gamble_stats(interaction.user)
+
     if action:
+        if balance == 0:
+            return discord.Embed(title="You have no money to gamble!")
         amount = balance
+
     if amount > balance:
         embed = discord.Embed(title="Not enough balance")
         embed.add_field(name="Needed Balance", value=f"${amount:,.2f}", inline=True)
         embed.add_field(name="Balance", value=f"${balance:,.2f}", inline=True)
         return embed
+
+    def roll():
+        return random.randint(1, 99)
+
+    bot_number, member_number = roll(), roll()
+
+    if bot_number < member_number:
+        result, win_text = "win", f"{interaction.user.mention} rolled higher"
+        balance += amount
+    elif bot_number > member_number:
+        result, win_text = "lose", "Dealer rolled higher"
+        balance -= amount
     else:
-        bot_number = int(random.randrange(1, 100))
-        member_number = int(random.randrange(1, 100))
-        if bot_number < member_number:
-            balance += amount
-            win_text = f"{interaction.user.mention} rolled higher"
-            result = "win"
-        elif bot_number > member_number:
-            balance -= amount
-            win_text = "Dealer rolled higher"
-            result = "lose"
-        else:
-            win_text = "No Winners"
-            result = "tie"
-        # immediately update your stats in one call:
-        update_user_gamble_stats(interaction.user, result, amount)
+        result, win_text = "tie", "No Winners"
 
-        # then save the new balance and build the embed
-        collection.update_one(
-            {"_id": interaction.user.id}, {"$set": {"balance": balance}}
-        )
+    update_user_gamble_stats(interaction.user, result, amount)
+    collection.update_one({"_id": interaction.user.id}, {"$set": {"balance": balance}})
+    gambles_won, gambles_lost, gambles_played, *_ = gamble_stats(interaction.user)
 
-        embed = discord.Embed(
-            title="Gambling Details", description=f"${amount:,.2f} bet"
-        )
-        embed.add_field(name="Dealer rolled a ", value=bot_number, inline=False)
-        embed.add_field(
-            name=f"{interaction.user} rolled a", value=member_number, inline=False
-        )
-        embed.add_field(name="Result", value=f"{win_text}", inline=False)
-        embed.add_field(
-            name="Previous Balance", value=f"${prev_balance:,.2f}", inline=True
-        )
-        embed.add_field(name="New Balance", value=f"${balance:,.2f}", inline=True)
-        new_balance = balance - prev_balance
-        if new_balance >= 0:
-            embed.add_field(
-                name="Result", value=f"+${abs(balance-prev_balance):,.2f}", inline=True
-            )
-        else:
-            embed.add_field(
-                name="Result", value=f"-${abs(balance-prev_balance):,.2f}", inline=True
-            )
-        embed.set_footer(
-            text=f"{gambles_won} gambles won, {gambles_lost} gambles lost, {gambles_played - gambles_won - gambles_lost} gambles tied, {gambles_played} gambles played"
-        )
-        return embed
+    new_balance = balance - prev_balance
+    sign = "+" if new_balance >= 0 else "-"
 
-
-def random_card():
-    dict_of_cards = {
-        1: "🇦",
-        2: "2️⃣",
-        3: "3️⃣",
-        4: "4️⃣",
-        5: "5️⃣",
-        6: "6️⃣",
-        7: "7️⃣",
-        8: "8️⃣",
-        9: "9️⃣",
-        10: ["🔟", "🇯", "🇶", "🇰"],
-    }
-    random_key = random.choice(list(dict_of_cards.keys()))
-    if random_key == 10:
-        random_card_choice = random.choice(dict_of_cards[random_key])
-    else:
-        random_card_choice = dict_of_cards[random_key]
-    return [random_key, random_card_choice]
-
-
-def fight_helper(interaction: discord.interactions, member: discord.Member):
-    embed = discord.Embed(title="Battle Time")
-    enemy_health = 100
-    player_health = 100
+    embed = discord.Embed(title="Gambling Details", description=f"${amount:,.2f} bet")
+    embed.add_field(name="Dealer rolled a", value=bot_number, inline=False)
     embed.add_field(
-        name=f"{interaction.user.display_name} Health Bar",
-        value=f"{player_health}",
-        inline=True,
+        name=f"{interaction.user} rolled a", value=member_number, inline=False
     )
-    embed.add_field(
-        name=f"{member.display_name} Health Bar", value=f"{enemy_health}", inline=True
+    embed.add_field(name="Result", value=win_text, inline=False)
+    embed.add_field(name="Previous Balance", value=f"${prev_balance:,.2f}", inline=True)
+    embed.add_field(name="New Balance", value=f"${balance:,.2f}", inline=True)
+    embed.add_field(name="Result", value=f"{sign}${abs(new_balance):,.2f}", inline=True)
+    embed.set_footer(
+        text=f"{gambles_won} gambles won, {gambles_lost} lost, {gambles_played - gambles_won - gambles_lost} tied, {gambles_played} played"
     )
     return embed
+
+
+def random_card(num_decks=6):
+    # Define the card values and their probabilities for Blackjack
+    values = ["🇦", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟", "🇯", "🇶", "🇰"]
+
+    # Create a deck with the appropriate distribution of cards
+    # For each deck, there are 4 Aces, 16 cards with value 10 (10, Jack, Queen, King), and 36 other cards (2-9)
+    deck = (
+        ["🇦"] * 4  # 4 Aces
+        + ["2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣"] * 4  # 2-9, 4 of each
+        + ["🔟", "🇯", "🇶", "🇰"] * 4
+    ) * num_decks  # 10, Jack, Queen, King (16 cards of value 10)
+
+    # Shuffle the deck
+    random.shuffle(deck)
+
+    # Draw a card from the shuffled deck
+    drawn_card = deck.pop()
+
+    # Assign numeric value based on card
+    if drawn_card == "🇦":  # Ace
+        card_key = 1  # This can be modified to return 1 or 11 based on game context
+    elif drawn_card in ["🔟", "🇯", "🇶", "🇰"]:  # 10, Jack, Queen, King
+        card_key = 10
+    else:
+        card_key = int(drawn_card[0])  # Number cards (2-9)
+
+    return [card_key, drawn_card]
 
 
 def slots_helper(
