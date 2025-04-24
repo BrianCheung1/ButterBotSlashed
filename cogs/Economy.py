@@ -48,6 +48,8 @@ class Economy(commands.Cog):
         self.bot = bot
         self.active_heist_users: set[int] = set()
         self.active_heist_creators = set()
+        self.active_duels = set()
+        self.active_rps_players = set()
         self.add_interest.start()
 
     @app_commands.command(name="give", description="Give users money")
@@ -107,6 +109,7 @@ class Economy(commands.Cog):
             pickaxe,
             pickaxe_bonus,
         ) = await run_mining_logic(interaction.user)
+
         if payout > 0:
             msg = (
                 f"{interaction.user.mention} mined and found **{result}**, worth ${payout:,.2f}!\n"
@@ -131,7 +134,8 @@ class Economy(commands.Cog):
         msg += f"\n{reward_message}"
 
         view = MineAgainView(interaction.user)
-        await interaction.followup.send(content=msg, view=view)
+        response_msg = await interaction.followup.send(content=msg, view=view)
+        view.message = response_msg  # Set the message AFTER sending
 
     @app_commands.command(name="fish", description="Catch fish for money")
     async def fish(self, interaction: discord.Interaction):
@@ -176,7 +180,8 @@ class Economy(commands.Cog):
 
         msg += f"\n{reward_message}"
         view = FishAgainView(interaction.user)
-        await interaction.followup.send(content=msg, view=view)
+        response_msg = await interaction.followup.send(content=msg, view=view)
+        view.message = response_msg  # Set the message AFTER sending
 
     @app_commands.command(
         name="steal", description="Attempt to steal money from another user."
@@ -208,8 +213,8 @@ class Economy(commands.Cog):
         if last_steal:
             now = datetime.utcnow()
             elapsed = now - last_steal
-            if elapsed.total_seconds() < 1800:
-                remaining = 1800 - elapsed.total_seconds()
+            if elapsed.total_seconds() < 3600:
+                remaining = 3600 - elapsed.total_seconds()
                 minutes = int(remaining // 60)
                 seconds = int(remaining % 60)
                 await interaction.followup.send(
@@ -221,8 +226,8 @@ class Economy(commands.Cog):
         if last_stolen:
             now = datetime.utcnow()
             elapsed = now - last_stolen
-            if elapsed.total_seconds() < 28800:  # 8 hours = 28800 seconds
-                remaining = 28800 - elapsed.total_seconds()
+            if elapsed.total_seconds() < 21600:
+                remaining = 21600 - elapsed.total_seconds()
                 hours = int(remaining // 3600)
                 minutes = int((remaining % 3600) // 60)
                 await interaction.followup.send(
@@ -529,6 +534,10 @@ class Economy(commands.Cog):
             return await interaction.response.send_message(
                 "Enter a valid amount to wager!", ephemeral=True
             )
+        if challenger.id in self.active_duels or challenged.id in self.active_duels:
+            return await interaction.response.send_message(
+                "One of you is already in a duel!", ephemeral=True
+            )
 
         # Fetch user balances (replace with actual DB queries)
         challenger_data = collection.find_one({"_id": challenger.id}) or {"balance": 0}
@@ -675,6 +684,10 @@ class Economy(commands.Cog):
             content="⚔️ Duel begins!", view=None
         )
 
+        # Mark both users as active
+        self.active_duels.add(challenger.id)
+        self.active_duels.add(challenged.id)
+
         special_abilities = {}
         round_number = 1
         fight_history = ""
@@ -772,6 +785,9 @@ class Economy(commands.Cog):
                 continue  # Restart the loop
 
             if challenger_hp <= 0 or challenged_hp <= 0:
+                # After the duel ends, remove them from active set
+                self.active_duels.remove(challenger.id)
+                self.active_duels.remove(challenged.id)
                 break
 
             round_number += 1
@@ -925,6 +941,15 @@ class Economy(commands.Cog):
             )
             return
 
+        # 🚫 Check if players are already in a game
+        if challenger.id in self.active_rps_players or (
+            opponent and opponent.id in self.active_rps_players
+        ):
+            await interaction.response.send_message(
+                "One of you is already in an RPS game!", ephemeral=True
+            )
+            return
+
         if is_pvp:
             pc_bal, c_bal = balance_of_player(challenger)
             po_bal, o_bal = balance_of_player(opponent)
@@ -1068,7 +1093,7 @@ class Economy(commands.Cog):
         await interaction.response.defer(thinking=True)
 
         now = datetime.utcnow()
-        cooldown_seconds = 28800  # 8 hours
+        cooldown_seconds = 21600  # 8 hours
 
         members = interaction.guild.members
         member_ids = [m.id for m in members]
@@ -1637,8 +1662,9 @@ async def run_mining_logic(user: discord.User) -> tuple[str, int, int, int, int,
 
 class MineAgainView(discord.ui.View):
     def __init__(self, user: discord.User):
-        super().__init__(timeout=None)
+        super().__init__(timeout=None)  # Set timeout duration
         self.user = user
+        self.click_count = 0  # Initialize click counter
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.user.id:
@@ -1652,6 +1678,16 @@ class MineAgainView(discord.ui.View):
     async def mine_again(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
+        self.click_count += 1  # Increment click count
+
+        if self.click_count >= 500:  # Disable button after 500 clicks
+            button.disabled = True
+            await interaction.response.edit_message(
+                content="The button has been disabled after 500 clicks.", view=self
+            )
+            return
+
+        # Call the mining logic
         (
             result,
             payout,
@@ -1689,7 +1725,9 @@ class MineAgainView(discord.ui.View):
                 f"**Current Level:** {new_level}\n**Current XP:** {xp}\n**XP Needed for Next Level:** {xp_needed}"
             )
         msg += f"\n{reward_message}"
-        await interaction.response.edit_message(content=msg, view=self)
+
+        # Update the message after the mining logic is completed
+        await interaction.response.edit_message(content=msg)
 
 
 async def run_fishing_logic(
@@ -1841,6 +1879,7 @@ class FishAgainView(discord.ui.View):
     def __init__(self, user: discord.User):
         super().__init__(timeout=None)
         self.user = user
+        self.click_count = 0
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.user.id:
@@ -1854,6 +1893,15 @@ class FishAgainView(discord.ui.View):
     async def fish_again(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
+        self.click_count += 1
+
+        if self.click_count >= 500:
+            button.disabled = True
+            await interaction.response.edit_message(
+                content="The button has been disabled after 500 casts.", view=self
+            )
+            return
+
         (
             result,
             payout,
@@ -1891,6 +1939,7 @@ class FishAgainView(discord.ui.View):
                 f"**Fishing Level:** {new_level}\n**XP:** {xp}\n**XP Needed for Next Level:** {xp_needed}"
             )
         msg += f"\n{reward_message}"
+
         await interaction.response.edit_message(content=msg, view=self)
 
 

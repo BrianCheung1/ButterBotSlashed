@@ -847,7 +847,6 @@ def gamble_helper(interaction: discord.Interaction, amount: Optional[int], actio
         else:
             win_text = "No Winners"
             result = "tie"
-        print("test")
         # immediately update your stats in one call:
         update_user_gamble_stats(interaction.user, result, amount)
 

@@ -84,6 +84,14 @@ DEFAULT_USER_DATA = {
     "roulette_played": 0,
     "roulette_total_winnings": 0,
     "roulette_total_losses": 0,
+    # player stats
+    "player_hp": 100,
+    "player_attack": 5,
+    "player_defense": 5,
+    "player_speed": 5,
+    "player_level": 1,
+    "player_xp": 0,
+    "player_next_level_xp": 50,
 }
 
 
@@ -308,6 +316,15 @@ def all_stats(member: discord.Member):
             "total_winnings": user_data.get("roulette_total_winnings", 0),
             "total_losses": user_data.get("roulette_total_losses", 0),
         },
+        "player": {
+            "hp": user_data.get("player_hp", 100),
+            "attack": user_data.get("player_attack", 5),
+            "defense": user_data.get("player_defense", 5),
+            "speed": user_data.get("player_speed", 5),
+            "level": user_data.get("player_level", 1),
+            "xp": user_data.get("player_xp", 0),
+            "next_level_xp": user_data.get("player_next_level_xp", 50),
+        },
     }
 
 
@@ -316,6 +333,21 @@ def bank_stats(member: discord.Member):
     user_data = get_user_data(member)
 
     return user_data.get("bank", 0)
+
+
+def player_stats(member: discord.Member):
+    """Retrieve player stats for the user, initializing fields if they don't exist."""
+    user_data = get_user_data(member)
+
+    return {
+        "player_hp": user_data.get("player_hp", 100),
+        "player_attack": user_data.get("player_attack", 5),
+        "player_defense": user_data.get("player_defense", 5),
+        "player_speed": user_data.get("player_speed", 5),
+        "player_level": user_data.get("player_level", 1),
+        "player_xp": user_data.get("player_xp", 0),
+        "player_next_level_xp": user_data.get("player_next_level_xp", 50),
+    }
 
 
 def update_user_heist_stats(
@@ -756,4 +788,61 @@ def update_user_roulette_stats(
 
     update_fields["$inc"]["roulette_played"] = 1
 
+    collection.update_one({"_id": user.id}, update_fields)
+
+
+# Example XP formula: base 50 XP, +25 per level
+def calculate_next_level_xp(level: int) -> int:
+    return 50 + (level - 1) * 25
+
+
+def update_user_player_stats(
+    user: discord.User,
+    hp_change: int = 0,
+    attack_change: int = 0,
+    defense_change: int = 0,
+    speed_change: int = 0,
+    level_change: int = 0,
+    xp_change: int = 0,
+):
+    user_data = get_user_data(user)
+    update_fields = {"$inc": {}}
+    manual_set_fields = {}
+
+    # Get current stats
+    level = user_data.get("player_level", 1)
+    xp = user_data.get("player_xp", 0) + xp_change
+
+    # Ensure XP is not negative
+    xp = max(xp, 0)
+
+    # Apply stat changes
+    if hp_change:
+        update_fields["$inc"]["player_hp"] = hp_change
+    if attack_change:
+        update_fields["$inc"]["player_attack"] = attack_change
+    if defense_change:
+        update_fields["$inc"]["player_defense"] = defense_change
+    if speed_change:
+        update_fields["$inc"]["player_speed"] = speed_change
+
+    # Process level-ups
+    level_ups = 0
+    while xp >= calculate_next_level_xp(level + level_ups):
+        xp -= calculate_next_level_xp(level + level_ups)
+        level_ups += 1
+
+    if level_ups > 0:
+        update_fields["$inc"]["player_level"] = level_ups
+
+    # Set updated XP and next level XP
+    manual_set_fields["player_xp"] = xp
+    manual_set_fields["player_next_level_xp"] = calculate_next_level_xp(
+        level + level_ups
+    )
+
+    if manual_set_fields:
+        update_fields["$set"] = manual_set_fields
+
+    # Apply update
     collection.update_one({"_id": user.id}, update_fields)

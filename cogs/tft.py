@@ -207,18 +207,16 @@ class TFT(commands.Cog):
 
         # Stats aggregation
         placements = []
-        starting_lp = filtered_matches[-1]["rankBefore"][1]
-        current_lp = filtered_matches[0]["rankAfter"][1]
         rank_before = filtered_matches[-1]["rankBefore"][0]
+        lp_before = filtered_matches[-1]["rankBefore"][1]
         rank_after = filtered_matches[0]["rankAfter"][0]
+        lp_after = filtered_matches[0]["rankAfter"][1]
 
         for match in filtered_matches:
             placements.append(match["info"]["placement"])
 
         avg_placement = sum(placements) / len(placements)
-        lp_diff = (
-            current_lp - starting_lp if rank_before == rank_after else "Rank Changed"
-        )
+        total_lp_diff = sum(match.get("lpDiff", 0) for match in filtered_matches)
 
         # Build embed
         embed = discord.Embed(
@@ -227,12 +225,12 @@ class TFT(commands.Cog):
             color=discord.Color.blue(),
         )
         embed.add_field(
-            name="Starting Rank", value=f"{rank_before} {starting_lp} LP", inline=True
+            name="Starting Rank", value=f"{rank_before} {lp_before} LP", inline=True
         )
         embed.add_field(
-            name="Current Rank", value=f"{rank_after} {current_lp} LP", inline=True
+            name="Current Rank", value=f"{rank_after} {lp_after} LP", inline=True
         )
-        embed.add_field(name="LP Change", value=str(lp_diff), inline=True)
+        embed.add_field(name="LP Change", value=f"{total_lp_diff:+} LP", inline=True)
         embed.add_field(
             name="Average Placement", value=f"{avg_placement:.2f}", inline=True
         )
@@ -243,14 +241,10 @@ class TFT(commands.Cog):
         # LP History (latest to oldest)
         lp_changes = []
         for match in filtered_matches:
-            rank_before, lp_before = match["rankBefore"]
-            rank_after, lp_after = match["rankAfter"]
-
-            if rank_before == rank_after:
-                delta = lp_after - lp_before
-                lp_changes.append(f"{delta:+} LP")
-            else:
-                lp_changes.append("Rank Change")
+            rb, _ = match["rankBefore"]
+            ra, _ = match["rankAfter"]
+            delta = match.get("lpDiff", 0)
+            lp_changes.append(f"{delta:+} LP")
 
         lp_history_str = " | ".join(lp_changes)
         embed.add_field(
