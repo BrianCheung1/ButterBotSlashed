@@ -239,16 +239,18 @@ class Economy(commands.Cog):
                 )
                 return
 
-        # Check if target or thief is too broke
-        if target_balance < 100:
+        MIN_REQUIRED_BALANCE = 100_000
+        # Check if target is too broke
+        if target_balance < MIN_REQUIRED_BALANCE:
             await interaction.followup.send(
-                f"{target.mention} is too broke to steal from."
+                f"{target.mention} needs at least ${MIN_REQUIRED_BALANCE:,} to be a valid robbery target."
             )
             return
 
-        if thief_balance < 100:
+        # Check if thief is too broke
+        if thief_balance < MIN_REQUIRED_BALANCE:
             await interaction.followup.send(
-                "You're too broke to attempt a robbery. Get some money first using /mine"
+                f"You need at least ${MIN_REQUIRED_BALANCE:,} to attempt a robbery. Use /mine to earn money."
             )
             return
 
@@ -1342,8 +1344,11 @@ class Economy(commands.Cog):
             remaining = cooldown_seconds - elapsed.total_seconds()
 
             if remaining > 0:
+                if uid not in id_to_name:
+                    continue  # skip users not in the current guild
                 name = id_to_name.get(uid)
-                users_on_cooldown[name] = remaining
+                display_name = f"{name} ({uid})"
+                users_on_cooldown[display_name] = remaining
 
         if not users_on_cooldown:
             await interaction.followup.send("🎉 No one is on cooldown. Steal away!")

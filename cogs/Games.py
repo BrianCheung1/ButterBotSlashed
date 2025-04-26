@@ -322,8 +322,16 @@ class Games(commands.Cog):
             embed.add_field(
                 name="Change", value=f"+${(balance - prev_balance):,.2f}", inline=True
             )
+            (
+                blackjacks_won,
+                blackjacks_lost,
+                blackjacks_played,
+                total_winnings,
+                total_losses,
+            ) = blackjack_stats(interaction.user)
+            tied = blackjacks_played - blackjacks_won - blackjacks_lost
             embed.set_footer(
-                text=f"Blackjacks won/tied/lost/played: updated in stats helper"
+                text=f"{blackjacks_won} blackjacks won, {blackjacks_lost} lost, {tied} tied, {blackjacks_played} played"
             )
 
             await interaction.followup.send(embed=embed)
@@ -537,6 +545,17 @@ class BlackjackButton(discord.ui.View):
             sign = "+" if diff >= 0 else "-"
             self.embed.add_field(
                 name="Change", value=f"{sign}${abs(diff):,.2f}", inline=True
+            )
+            (
+                blackjacks_won,
+                blackjacks_lost,
+                blackjacks_played,
+                total_winnings,
+                total_losses,
+            ) = blackjack_stats(interaction.user)
+            tied = blackjacks_played - blackjacks_won - blackjacks_lost
+            self.embed.set_footer(
+                text=f"{blackjacks_won} blackjacks won, {blackjacks_lost} lost, {tied} tied, {blackjacks_played} played"
             )
 
             await interaction.response.edit_message(embed=self.embed, view=self)
