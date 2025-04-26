@@ -32,7 +32,10 @@ from utils.stats import (
     update_user_mine_stats,
     update_user_roulette_stats,
     update_user_steal_stats,
+    duel_stats,
+    apply_shop_item_effect,
 )
+from utils.shop import SHOP_ITEMS
 
 load_dotenv()
 MONGO_URL = os.getenv("ATLAS_URI")
@@ -510,6 +513,40 @@ class Economy(commands.Cog):
     #     )
 
     @app_commands.command(
+        name="duelstats", description="Check your duel stats or against another member"
+    )
+    @app_commands.describe(member="The member to check head-to-head stats against")
+    async def duelstats(
+        self, interaction: discord.Interaction, member: discord.Member = None
+    ):
+        if member:
+            stats = duel_stats(interaction.user, member)
+        else:
+            stats = duel_stats(interaction.user)
+
+        if member:
+            title = f"⚔️ Duel Stats vs {member.display_name}"
+            desc = (
+                f"**Wins**: {stats['wins']}\n"
+                f"**Losses**: {stats['losses']}\n"
+                f"**Ties**: {stats['ties']}\n"
+                f"**Total Duels**: {stats['total']}"
+            )
+        else:
+            title = f"📊 Overall Duel Stats for {interaction.user.display_name}"
+            desc = (
+                f"**Duels Won**: {stats['duels_won']}\n"
+                f"**Duels Lost**: {stats['duels_lost']}\n"
+                f"**Duels Tied**: {stats['duels_tied']}\n"
+                f"**Total Duels**: {stats['duels_played']}"
+            )
+
+        embed = discord.Embed(
+            title=title, description=desc, color=discord.Color.blurple()
+        )
+        await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(
         name="duel", description="Challenge another user to a duel for money!"
     )
     @app_commands.describe(
@@ -570,12 +607,12 @@ class Economy(commands.Cog):
         ]
 
         if view.value is None:
-            return await interaction.response.edit_message(
+            return await interaction.edit_original_response(
                 content=random.choice(decline_messages), view=None
             )
 
         if view.value is False:
-            return await interaction.response.edit_message(
+            return await interaction.edit_original_response(
                 content=random.choice(decline_messages), view=None
             )
 
@@ -782,6 +819,8 @@ class Economy(commands.Cog):
                 challenged_hp = 100
                 round_number = 1
                 special_abilities.clear()
+                update_user_duel_stats(challenger, challenged, "tie", 0)
+                update_user_duel_stats(challenged, challenger, "tie", 0)
                 continue  # Restart the loop
 
             if challenger_hp <= 0 or challenged_hp <= 0:
@@ -821,13 +860,13 @@ class Economy(commands.Cog):
             ]
 
             # Update duel stats for both players
-            update_user_duel_stats(winner, "win", amount)
-            update_user_duel_stats(loser, "lose", -amount)
+            update_user_duel_stats(winner, loser, "win", amount)
+            update_user_duel_stats(loser, winner, "lose", -amount)
 
             outcome_text = fight_history + random.choice(win_outcomes)
         else:
-            update_user_duel_stats(challenger, "tie", 0)
-            update_user_duel_stats(challenged, "tie", 0)
+            update_user_duel_stats(challenger, challenged, "tie", 0)
+            update_user_duel_stats(challenged, challenger, "tie", 0)
             outcome_text = fight_history + random.choice(tie_outcomes)
 
         await msg.edit(content=f"🎮 **Duel Complete!**\n\n{outcome_text}", embed=embed)
@@ -850,10 +889,10 @@ class Economy(commands.Cog):
         await interaction.response.defer(thinking=True)
 
         _, balance = balance_of_player(interaction.user)
-        bank_balance = bank_stats(interaction.user)
+        bank_balance, bank_cap, bank_level = bank_stats(interaction.user)
 
         if action and action.value == "all":
-            available_space = 1_000_000 - bank_balance
+            available_space = bank_cap - bank_balance
             if available_space <= 0:
                 await interaction.followup.send(
                     f"{interaction.user.mention}, your bank is already full."
@@ -877,13 +916,15 @@ class Economy(commands.Cog):
             )
             return
 
-        if amount + bank_balance > 1_000_000:
+        if amount + bank_balance > bank_cap:
             await interaction.followup.send(
-                f"{interaction.user.mention}, you can't have more than $1,000,000 in the bank."
+                f"{interaction.user.mention}, you can't have more than ${bank_cap:,} in the bank."
             )
             return
 
-        new_balance = update_user_bank_stats(interaction.user, amount)
+        new_balance, bank_cap, bank_level = update_user_bank_stats(
+            interaction.user, amount, bank_cap, bank_level
+        )
         update_balance(interaction.user, balance - amount)
         await interaction.followup.send(
             f"Deposited ${amount:,} into the bank. Current Bank Balance: ${new_balance:,}"
@@ -908,7 +949,7 @@ class Economy(commands.Cog):
         await interaction.response.defer(thinking=True)
 
         _, balance = balance_of_player(interaction.user)
-        bank_balance = bank_stats(interaction.user)
+        bank_balance, bank_cap, bank_level = bank_stats(interaction.user)
 
         # Handle 'all' option
         if action and action.value == "all":
@@ -933,11 +974,73 @@ class Economy(commands.Cog):
             return
 
         # Withdraw and update balances
-        new_balance = update_user_bank_stats(interaction.user, -amount)
+        new_balance, bank_cap, bank_level = update_user_bank_stats(
+            interaction.user, -amount, bank_cap, bank_level
+        )
         update_balance(interaction.user, balance + amount)
 
         await interaction.followup.send(
             f"Withdrew ${amount:,} from the bank. Current Bank Balance: ${new_balance:,}"
+        )
+
+    @app_commands.command(name="shop", description="Buy items from the shop.")
+    @app_commands.describe(item="Item you want to buy")
+    @app_commands.choices(
+        item=[
+            app_commands.Choice(name=item_data["name"], value=item_key)
+            for item_key, item_data in SHOP_ITEMS.items()
+        ]
+    )
+    async def shop(
+        self, interaction: discord.Interaction, item: app_commands.Choice[str] = None
+    ):
+        await interaction.response.defer(thinking=True)
+
+        user = interaction.user
+        _, balance = balance_of_player(user)
+
+        if item is None:  # If no item is chosen, list all available items
+            shop_message = "**Welcome to the shop!**\n\nHere are the available items:\n"
+
+            for item_key, item_data in SHOP_ITEMS.items():
+                if item_key == "bank_upgrade":
+                    _, _, bank_level = bank_stats(user)
+                    cost = item_data["base_price"] + (
+                        (bank_level - 1) * item_data["price_increment"]
+                    )
+                else:
+                    cost = item_data["price"]
+
+                shop_message += f"**{item_data['name']}**: {item_data['description']} - Cost: ${cost:,}\n"
+
+            await interaction.followup.send(shop_message)
+            return
+
+        # Now it's safe to access item.value
+        item_key = item.value
+        item_data = SHOP_ITEMS[item_key]
+
+        # Calculate the cost of the selected item
+        if item_key == "bank_upgrade":
+            bank_balance, bank_cap, bank_level = bank_stats(user)
+            cost = item_data["base_price"] + (
+                (bank_level - 1) * item_data["price_increment"]
+            )
+        else:
+            cost = item_data["price"]
+
+        if balance < cost:
+            await interaction.followup.send(
+                f"{user.mention}, you need ${cost:,} to buy **{item_data['name']}**, but you only have ${balance:,}."
+            )
+            return
+
+        # Deduct money and apply the effect of the item
+        update_balance(user, balance - cost)
+        apply_shop_item_effect(user, item_key)
+
+        await interaction.followup.send(
+            f"{user.mention}, you bought **{item_data['name']}** for ${cost:,}!"
         )
 
     @app_commands.command(
@@ -950,10 +1053,13 @@ class Economy(commands.Cog):
         await interaction.response.defer(thinking=True)
 
         target = member or interaction.user
-        bank_balance = bank_stats(target)
+        bank_balance, bank_cap, bank_level = bank_stats(target)
 
         await interaction.followup.send(
-            f"{target.mention}, your current bank balance is ${bank_balance:,}."
+            f"{target.mention}, here are your bank stats:\n"
+            f"**Bank Balance**: ${bank_balance:,}\n"
+            f"**Bank Capacity**: ${bank_cap:,}\n"
+            f"**Bank Level**: {bank_level}"
         )
 
     @app_commands.command(name="roulette", description="Bet on Red, Black, or Green!")
@@ -1113,6 +1219,7 @@ class Economy(commands.Cog):
             app_commands.Choice(name="Mining", value="mining"),
             app_commands.Choice(name="Fishing", value="fishing"),
             app_commands.Choice(name="Bank", value="bank"),
+            app_commands.Choice(name="Duel Wins", value="duel_wins"),  # 👈 Added
         ]
     )
     @app_commands.describe(type="Choose leaderboard type")
@@ -1133,6 +1240,15 @@ class Economy(commands.Cog):
                 uid = doc["_id"]
                 if type.value == "balance":
                     value = doc.get("balance", 0)
+                elif type.value == "duel_wins":
+                    duel_stats = doc.get("duel_stats", {})
+                    value = sum(
+                        opponent_stats.get("win", 0)
+                        for opponent_stats in duel_stats.values()
+                        if isinstance(opponent_stats, dict)
+                    )
+                    if value == 0:
+                        continue
                 elif type.value == "fishing":
                     value = doc.get("fishing_level", 0)
                     if value == 0:
@@ -1157,18 +1273,28 @@ class Economy(commands.Cog):
             pages = []
             page_count = 1
             count = 0
-            title = f"{interaction.guild.name} {'Wealth' if type.value == 'balance' else 'Top ' + type.value.capitalize()} Leaderboard"
+            title_map = {
+                "balance": "Wealth",
+                "bank": "Bank",
+                "fishing": "Fishing",
+                "mining": "Mining",
+                "duel_wins": "Duel Wins",
+            }
+            title = f"{interaction.guild.name} {title_map[type.value]} Leaderboard"
+
             embed = discord.Embed(title=title)
             embed.set_footer(
                 text=f"Page {page_count}", icon_url=interaction.user.display_avatar
             )
 
             for name, value in sorted_members.items():
-                field_value = (
-                    f"${value:,.2f}"
-                    if type.value in ["balance", "bank"]
-                    else f"Level {value}/99"
-                )
+                if type.value in ["balance", "bank"]:
+                    field_value = f"${value:,.2f}"
+                elif type.value == "duel_wins":
+                    field_value = f"{value} Wins"
+                else:
+                    field_value = f"Level {value}/99"
+
                 embed.add_field(
                     name=f"{count + 1}. {name}", value=field_value, inline=False
                 )
@@ -1821,7 +1947,7 @@ async def run_mining_logic(user: discord.User) -> tuple[str, int, int, int, int,
         "netherite",
     ]
     PICKAXE_BONUSES = {
-        "wood": 0.00,
+        "wood": 0.05,
         "stone": 0.10,
         "copper": 0.25,
         "iron": 1,
@@ -1833,8 +1959,8 @@ async def run_mining_logic(user: discord.User) -> tuple[str, int, int, int, int,
         "netherite": 10,
     }
 
-    # Default to wood
-    best_pickaxe = "wood"
+    # Default to fist
+    best_pickaxe = "fist"
     highest_bonus = 0.0
 
     # Loop through each item in the inventory
@@ -2059,7 +2185,7 @@ async def run_fishing_logic(
         "netherite",
     ]
     FISHING_ROD_BONUSES = {
-        "wood": 0.00,
+        "wood": 0.05,
         "stone": 0.10,
         "copper": 0.25,
         "iron": 1,
@@ -2071,8 +2197,8 @@ async def run_fishing_logic(
         "netherite": 10,
     }
 
-    # Default to wood
-    best_rod = "wood"
+    # Default to fist
+    best_rod = "fist"
     highest_bonus = 0.0
 
     # Loop through each item in the inventory

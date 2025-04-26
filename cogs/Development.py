@@ -10,11 +10,16 @@ import aiosqlite
 import discord
 from discord import app_commands
 from discord.ext import commands, tasks
+from pymongo import MongoClient
 
 from utils.logging import send_error_to_support_channel
 from utils.stats import get_user_data
 
 GUILD_ID = 152954629993398272
+MONGO_URL = os.getenv("ATLAS_URI")
+cluster = MongoClient(MONGO_URL)
+db = cluster["Users"]
+collection = db["UserData"]
 
 
 class Development(commands.Cog):
@@ -321,6 +326,24 @@ class Development(commands.Cog):
             print(f"[✅] Synced stats for new member: {member.display_name}")
         except Exception as e:
             print(f"[❌] Failed to sync stats for {member.display_name}: {e}")
+
+    @app_commands.command(
+        name="reset_duel_stats", description="Reset all duel stats (owner only)."
+    )
+    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    @app_commands.check(is_owner_check)
+    async def reset_duel_stats(self, interaction: discord.Interaction):
+        result = collection.update_many(
+            {},
+            {
+                "$unset": {"duels_won": "", "duels_lost": "", "duels_tied": ""},
+                "$set": {"duel_stats": {}},
+            },
+        )
+
+        await interaction.response.send_message(
+            f"🧹 Reset duel stats for `{result.modified_count}` users.", ephemeral=True
+        )
 
 
 async def setup(bot: commands.Bot) -> None:

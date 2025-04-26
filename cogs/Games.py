@@ -925,7 +925,7 @@ def slots_helper(
     # 4a) 3-in-line
     for a, b, c in winning_lines:
         if board[a] == board[b] == board[c]:
-            payout_amount = amount * 2.75
+            payout_amount = amount * 3
             # embed.add_field(
             #     name="Result",
             #     value=f"3 in a line — You win ${payout_amount:,.2f}\nCurrent Balance: ${balance:,.2f}",
@@ -944,13 +944,13 @@ def slots_helper(
         max_count = max(counts.values())
 
         if max_count == 3:
-            payout_amount = amount * 1.5
+            payout_amount = amount * 2
             desc = "3 special fruits"
         elif max_count == 4:
-            payout_amount = amount * 2
+            payout_amount = amount * 7
             desc = "4 special fruits"
         elif max_count >= 5:
-            payout_amount = amount * 2.5
+            payout_amount = amount * 12
             desc = "5+ special fruits"
         else:
             payout_amount = -amount

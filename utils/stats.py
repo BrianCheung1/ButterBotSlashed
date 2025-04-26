@@ -47,9 +47,7 @@ DEFAULT_USER_DATA = {
     "backstabs": 0,
     "times_betrayed": 0,
     # Duel Stats:
-    "duels_won": 0,
-    "duels_lost": 0,
-    "duels_tied": 0,
+    "duel_stats": {},
     # Steal Stats
     "steals_attempted": 0,  # Total number of steal attempts by the user
     "steals_successful": 0,  # Total number of successful steals by the user
@@ -71,6 +69,8 @@ DEFAULT_USER_DATA = {
     "inventory": [],  # Array to hold the inventory items
     # Bank
     "bank": 0,  # Bank balance
+    "bank_cap": 1000000,  # Bank cap
+    "bank_level": 1,  # Bank level
     # highlow game
     "highlow_won": 0,
     "highlow_lost": 0,
@@ -233,6 +233,33 @@ def roulette_stats(member: discord.Member):
     }
 
 
+def duel_stats(user: discord.User, opponent: discord.User = None):
+    """Return duel stats for a user. If opponent is given, return head-to-head."""
+    user_data = get_user_data(user)
+    duel_data = user_data.get("duel_stats", {})
+
+    if opponent:
+        vs_stats = duel_data.get(str(opponent.id), {})
+        return {
+            "wins": vs_stats.get("win", 0),
+            "losses": vs_stats.get("lose", 0),
+            "ties": vs_stats.get("tie", 0),
+            "total": sum(vs_stats.get(key, 0) for key in ("win", "lose", "tie")),
+        }
+    else:
+        wins = losses = ties = 0
+        for record in duel_data.values():
+            wins += record.get("win", 0)
+            losses += record.get("lose", 0)
+            ties += record.get("tie", 0)
+        return {
+            "duels_won": wins,
+            "duels_lost": losses,
+            "duels_tied": ties,
+            "duels_played": wins + losses + ties,
+        }
+
+
 def all_stats(member: discord.Member):
     user_data = get_user_data(member)
 
@@ -262,11 +289,6 @@ def all_stats(member: discord.Member):
             "won": user_data.get("wordles_won", 0),
             "lost": user_data.get("wordles_lost", 0),
             "played": user_data.get("wordles_played", 0),
-        },
-        "duel": {
-            "won": user_data.get("duels_won", 0),
-            "lost": user_data.get("duels_lost", 0),
-            "tied": user_data.get("duels_tied", 0),
         },
         "heist": {
             "joined": user_data.get("heists_joined", 0),
@@ -331,8 +353,11 @@ def all_stats(member: discord.Member):
 def bank_stats(member: discord.Member):
     """Retrieve bank stats for the user, initializing fields if they don't exist."""
     user_data = get_user_data(member)
-
-    return user_data.get("bank", 0)
+    return (
+        user_data.get("bank", 0),
+        user_data.get("bank_cap", 1000000),
+        user_data.get("bank_level", 1),
+    )
 
 
 def player_stats(member: discord.Member):
@@ -377,24 +402,23 @@ def update_user_heist_stats(
 
 
 def update_user_duel_stats(
-    user: discord.User, result: str, balance_change: int = 0  # 'win', 'lose', or 'tie'
+    user: discord.User,
+    opponent: discord.User,
+    result: str,
+    balance_change: int = 0,  # 'win', 'lose', or 'tie'
 ):
     user_data = get_user_data(user)
-    update_fields = {"$inc": {}}
 
-    if result == "win":
-        update_fields["$inc"]["duels_won"] = 1
-    elif result == "lose":
-        update_fields["$inc"]["duels_lost"] = 1
-    elif result == "tie":
-        update_fields["$inc"]["duels_tied"] = 1
+    field = f"duel_stats.{opponent.id}.{result}"
+
+    # Build the update query
+    update_query = {"$inc": {field: 1}}
 
     if balance_change != 0:
-        update_fields["$inc"]["balance"] = balance_change
+        update_query["$inc"]["balance"] = balance_change
 
-    update_fields["$inc"]["duels_played"] = 1
-
-    collection.update_one({"_id": user.id}, update_fields)
+    # Perform the update
+    collection.update_one({"_id": user.id}, update_query)
 
 
 def update_user_steal_stats(
@@ -659,7 +683,7 @@ def reward_player_for_level_up(user: discord.User, level, type="mining"):
 
     # Tool milestone rewards
     milestone_rewards = {
-        0: "Wood",
+        10: "Wood",
         20: "Stone",
         30: "Copper",
         40: "Iron",
@@ -709,19 +733,25 @@ def reward_player_for_level_up(user: discord.User, level, type="mining"):
     return message
 
 
-def update_user_bank_stats(user: discord.User, amount: int) -> tuple[int, bool]:
+def update_user_bank_stats(
+    user: discord.User,
+    amount: int,
+    cap: int,
+    level: int,
+) -> tuple[int, bool]:
     # Fetch user data from the database
     user_data = get_user_data(user)
 
-    # Get current balance
+    # Get current balance, cap, and level (with defaults if not found)
     current_balance = user_data.get("bank", 0)
 
+    # Update balance
     new_balance = current_balance + amount
-
-    # Save new balance to the database
     collection.update_one({"_id": user.id}, {"$set": {"bank": new_balance}})
+    collection.update_one({"_id": user.id}, {"$set": {"bank_cap": cap}})
+    collection.update_one({"_id": user.id}, {"$set": {"bank_level": level}})
 
-    return new_balance
+    return new_balance, cap, level
 
 
 def update_balance(user: discord.User, amount: int) -> tuple[int, bool]:
@@ -867,3 +897,12 @@ def update_user_player_stats(
 
     # Apply update
     collection.update_one({"_id": user.id}, update_fields)
+
+
+def apply_shop_item_effect(user, item_key):
+    user_data = get_user_data(user)
+    # Apply effects based on the item purchased
+    if item_key == "bank_upgrade":
+        current_cap = user_data.get("bank_cap", 1000000)
+        current_level = user_data.get("bank_level", 1)
+        update_user_bank_stats(user, 0, current_cap + 250_000, current_level + 1)
