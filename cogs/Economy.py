@@ -67,8 +67,17 @@ class Economy(commands.Cog):
         amount: app_commands.Range[int, 1, None],
     ):
         await interaction.response.defer(thinking=True)
+
+        # ❗ Prevent users from giving money to themselves
+        if interaction.user.id == member.id:
+            await interaction.followup.send(
+                "You can't give money to yourself!", ephemeral=True
+            )
+            return
+
         prev_balance, balance = balance_of_player(member)
         app = await interaction.client.application_info()
+
         if interaction.user.id == app.owner.id:
             balance += amount
             collection.update_one({"_id": member.id}, {"$set": {"balance": balance}})
@@ -77,7 +86,7 @@ class Economy(commands.Cog):
             prev_balance, user_balance = balance_of_player(interaction.user)
             if amount > user_balance:
                 await interaction.followup.send(
-                    f"{interaction.user.mention} is too broke to give away money - they only have {user_balance:,.2f}"
+                    f"{interaction.user.mention} is too broke to give away money - they only have ${user_balance:,.2f}"
                 )
             else:
                 balance += amount
@@ -91,7 +100,7 @@ class Economy(commands.Cog):
                     {"$set": {"balance": user_balance}},
                 )
                 await interaction.followup.send(
-                    f"{member.mention} now has ${balance:,}"
+                    f"{member.mention} now has ${balance:,.2f}"
                 )
 
     @app_commands.command(name="mine", description="Mine ores for money")
@@ -243,14 +252,14 @@ class Economy(commands.Cog):
         # Check if target is too broke
         if target_balance < MIN_REQUIRED_BALANCE:
             await interaction.followup.send(
-                f"{target.mention} needs at least ${MIN_REQUIRED_BALANCE:,} to be a valid robbery target."
+                f"{target.mention} needs at least ${MIN_REQUIRED_BALANCE:,.2f} to be a valid robbery target."
             )
             return
 
         # Check if thief is too broke
         if thief_balance < MIN_REQUIRED_BALANCE:
             await interaction.followup.send(
-                f"You need at least ${MIN_REQUIRED_BALANCE:,} to attempt a robbery. Use /mine to earn money."
+                f"You need at least ${MIN_REQUIRED_BALANCE:,.2f} to attempt a robbery. Use /mine to earn money."
             )
             return
 
@@ -260,19 +269,19 @@ class Economy(commands.Cog):
         now = datetime.utcnow()
 
         success_messages = [
-            "💰 Success! You stole ${amount:,} ({percent:.1f}%) from {target}!",
-            "🕶️ Like a shadow in the night, you nabbed ${amount:,} from {target}!",
-            "👟 Quick hands! You got away with ${amount:,} from {target}!",
-            "🧤 Smooth criminal! You lifted ${amount:,} from {target} without a trace.",
-            "💸 Jackpot! {target} didn’t see it coming — ${amount:,} is yours!",
+            "💰 Success! You stole ${amount:,.2f} ({percent:.1f}%) from {target}!",
+            "🕶️ Like a shadow in the night, you nabbed ${amount:,.2f} from {target}!",
+            "👟 Quick hands! You got away with ${amount:,.2f} from {target}!",
+            "🧤 Smooth criminal! You lifted ${amount:,.2f} from {target} without a trace.",
+            "💸 Jackpot! {target} didn’t see it coming — ${amount:,.2f} is yours!",
         ]
 
         fail_messages = [
-            "🚓 Busted! You got caught trying to rob {target} and lost ${penalty:,} ({percent:.1f}%)!",
-            "🧍‍♂️ {target} turned around just in time — you lost ${penalty:,} for your clumsiness.",
-            "🪤 Trap sprung! {target} set you up and you lost ${penalty:,}!",
-            "📸 Caught on camera! You dropped ${penalty:,} while fleeing from {target}.",
-            "👮‍♂️ Security tackled you! You paid ${penalty:,} in fines to {target}.",
+            "🚓 Busted! You got caught trying to rob {target} and lost ${penalty:,.2f} ({percent:.1f}%)!",
+            "🧍‍♂️ {target} turned around just in time — you lost ${penalty:,.2f} for your clumsiness.",
+            "🪤 Trap sprung! {target} set you up and you lost ${penalty:,.2f}!",
+            "📸 Caught on camera! You dropped ${penalty:,.2f} while fleeing from {target}.",
+            "👮‍♂️ Security tackled you! You paid ${penalty:,.2f} in fines to {target}.",
         ]
 
         if random.random() < success_chance:
@@ -409,8 +418,8 @@ class Economy(commands.Cog):
         )
 
         await interaction.followup.send(
-            f"✅ You claimed your daily reward of **${total_reward:,}**!\n"
-            f"🔥 Streak: {streak + 1} day(s) (+${bonus:,} bonus)"
+            f"✅ You claimed your daily reward of **${total_reward:,.2f}**!\n"
+            f"🔥 Streak: {streak + 1} day(s) (+${bonus:,.2f} bonus)"
         )
 
     @app_commands.command(name="heist", description="Join a heist to rob the bank!")
@@ -510,7 +519,7 @@ class Economy(commands.Cog):
     #     await interaction.response.send_message(
     #         f"🎲 Starting number is **{start_number}** (range: 1–100).\n"
     #         f"Will the next number be higher or lower?\n"
-    #         f"Wager: **${amount:,}**",
+    #         f"Wager: **${amount:,.2f}**",
     #         view=view,
     #     )
 
@@ -532,7 +541,9 @@ class Economy(commands.Cog):
                 f"**Wins**: {stats['wins']}\n"
                 f"**Losses**: {stats['losses']}\n"
                 f"**Ties**: {stats['ties']}\n"
-                f"**Total Duels**: {stats['total']}"
+                f"**Total Duels**: {stats['total']}\n"
+                f"**Amount Won**: ${stats['amount_won']:,.2f}\n"
+                f"**Amount Lost**: ${stats['amount_lost']:,.2f}"
             )
         else:
             title = f"📊 Overall Duel Stats for {interaction.user.display_name}"
@@ -540,7 +551,9 @@ class Economy(commands.Cog):
                 f"**Duels Won**: {stats['duels_won']}\n"
                 f"**Duels Lost**: {stats['duels_lost']}\n"
                 f"**Duels Tied**: {stats['duels_tied']}\n"
-                f"**Total Duels**: {stats['duels_played']}"
+                f"**Total Duels**: {stats['duels_played']}\n"
+                f"**Total Amount Won**: ${stats['total_amount_won']:,.2f}\n"
+                f"**Total Amount Lost**: ${stats['total_amount_lost']:,.2f}"
             )
 
         embed = discord.Embed(
@@ -595,7 +608,7 @@ class Economy(commands.Cog):
         # Ask for duel acceptance
         view = DuelAcceptView(challenger, challenged)
         await interaction.response.send_message(
-            f"{challenged.mention}, {challenger.mention} has challenged you to a duel for **${amount:,}**! Do you accept?",
+            f"{challenged.mention}, {challenger.mention} has challenged you to a duel for **${amount:,.2f}**! Do you accept?",
             view=view,
         )
         await view.wait()
@@ -920,7 +933,7 @@ class Economy(commands.Cog):
 
         if amount + bank_balance > bank_cap:
             await interaction.followup.send(
-                f"{interaction.user.mention}, you can't have more than ${bank_cap:,} in the bank."
+                f"{interaction.user.mention}, you can't have more than ${bank_cap:,.2f} in the bank."
             )
             return
 
@@ -929,7 +942,7 @@ class Economy(commands.Cog):
         )
         update_balance(interaction.user, balance - amount)
         await interaction.followup.send(
-            f"Deposited ${amount:,} into the bank. Current Bank Balance: ${new_balance:,}"
+            f"Deposited ${amount:,.2f} into the bank. Current Bank Balance: ${new_balance:,.2f}"
         )
 
     @app_commands.command(name="withdraw", description="Withdraw money from the bank")
@@ -982,7 +995,7 @@ class Economy(commands.Cog):
         update_balance(interaction.user, balance + amount)
 
         await interaction.followup.send(
-            f"Withdrew ${amount:,} from the bank. Current Bank Balance: ${new_balance:,}"
+            f"Withdrew ${amount:,.2f} from the bank. Current Bank Balance: ${new_balance:,.2f}"
         )
 
     @app_commands.command(name="shop", description="Buy items from the shop.")
@@ -1013,7 +1026,7 @@ class Economy(commands.Cog):
                 else:
                     cost = item_data["price"]
 
-                shop_message += f"**{item_data['name']}**: {item_data['description']} - Cost: ${cost:,}\n"
+                shop_message += f"**{item_data['name']}**: {item_data['description']} - Cost: ${cost:,.2f}\n"
 
             await interaction.followup.send(shop_message)
             return
@@ -1033,7 +1046,7 @@ class Economy(commands.Cog):
 
         if balance < cost:
             await interaction.followup.send(
-                f"{user.mention}, you need ${cost:,} to buy **{item_data['name']}**, but you only have ${balance:,}."
+                f"{user.mention}, you need ${cost:,.2f} to buy **{item_data['name']}**, but you only have ${balance:,.2f}."
             )
             return
 
@@ -1042,7 +1055,7 @@ class Economy(commands.Cog):
         apply_shop_item_effect(user, item_key)
 
         await interaction.followup.send(
-            f"{user.mention}, you bought **{item_data['name']}** for ${cost:,}!"
+            f"{user.mention}, you bought **{item_data['name']}** for ${cost:,.2f}!"
         )
 
     @app_commands.command(
@@ -1059,8 +1072,8 @@ class Economy(commands.Cog):
 
         await interaction.followup.send(
             f"{target.mention}, here are your bank stats:\n"
-            f"**Bank Balance**: ${bank_balance:,}\n"
-            f"**Bank Capacity**: ${bank_cap:,}\n"
+            f"**Bank Balance**: ${bank_balance:,.2f}\n"
+            f"**Bank Capacity**: ${bank_cap:,.2f}\n"
             f"**Bank Level**: {bank_level}"
         )
 
@@ -1085,7 +1098,7 @@ class Economy(commands.Cog):
 
         view = RouletteButtons(interaction.user, amount, balance)
         await interaction.response.send_message(
-            f"🎯 Choose your color to bet **{amount:,}** coins!", view=view
+            f"🎯 Choose your color to bet **{amount:,.2f}** coins!", view=view
         )
 
     @app_commands.command(
@@ -1221,10 +1234,9 @@ class Economy(commands.Cog):
             app_commands.Choice(name="Mining", value="mining"),
             app_commands.Choice(name="Fishing", value="fishing"),
             app_commands.Choice(name="Bank", value="bank"),
-            app_commands.Choice(name="Duel Wins", value="duel_wins"),  # 👈 Added
+            app_commands.Choice(name="Duels", value="total_amount_won"),  # 👈 Added
         ]
     )
-    @app_commands.describe(type="Choose leaderboard type")
     async def leaderboard(
         self, interaction: discord.Interaction, type: app_commands.Choice[str]
     ):
@@ -1259,9 +1271,24 @@ class Economy(commands.Cog):
                     value = doc.get("bank", 0)
                     if value == 0:
                         continue
-                else:
+                elif type.value == "mining":
                     value = doc.get("mining_level", 0)
                     if value == 0:
+                        continue
+                elif type.value == "total_amount_won":  # Total amount won leaderboard
+                    duel_stats = doc.get("duel_stats", {})
+                    total_won = sum(
+                        opponent_stats.get("amount_won", 0)
+                        for opponent_stats in duel_stats.values()
+                        if isinstance(opponent_stats, dict)
+                    )
+                    total_lost = sum(
+                        opponent_stats.get("amount_lost", 0)
+                        for opponent_stats in duel_stats.values()
+                        if isinstance(opponent_stats, dict)
+                    )
+                    value = total_won - total_lost
+                    if value <= 0:
                         continue
 
                 name = id_to_name.get(uid)
@@ -1281,6 +1308,7 @@ class Economy(commands.Cog):
                 "fishing": "Fishing",
                 "mining": "Mining",
                 "duel_wins": "Duel Wins",
+                "total_amount_won": "Net Amount Won",  # Added label for new leaderboard type
             }
             title = f"{interaction.guild.name} {title_map[type.value]} Leaderboard"
 
@@ -1294,6 +1322,8 @@ class Economy(commands.Cog):
                     field_value = f"${value:,.2f}"
                 elif type.value == "duel_wins":
                     field_value = f"{value} Wins"
+                elif type.value == "total_amount_won":  # Show the total amount won
+                    field_value = f"${value:,.2f}"
                 else:
                     field_value = f"Level {value}/99"
 
@@ -1317,6 +1347,9 @@ class Economy(commands.Cog):
             return pages
 
         pages = await generate_pages()
+        if not pages:  # If no pages were generated, send a message saying so
+            await interaction.followup.send("No data available for this leaderboard.")
+            return
         view = LeaderboardButton(interaction, pages, refresh_func=generate_pages)
         await interaction.followup.send(embed=pages[0], view=view)
 
@@ -1672,7 +1705,7 @@ class HeistButtonView(discord.ui.View):
 
         if not can_join:
             await interaction.response.send_message(
-                f"🚫 You need at least **${min_required_balance:,}** to join the heist. You only have **${balance:,}**.",
+                f"🚫 You need at least **${min_required_balance:,.2f}** to join the heist. You only have **${balance:,.2f}**.",
                 ephemeral=True,
             )
             return
@@ -1743,7 +1776,7 @@ class HeistButtonView(discord.ui.View):
                     user, loot_change=-stolen_amount, won=False, was_betrayed=True
                 )
                 messages.append(
-                    f"🩸 {user.mention} was betrayed and lost **${stolen_amount:,}**!"
+                    f"🩸 {user.mention} was betrayed and lost **${stolen_amount:,.2f}**!"
                 )
 
             # Reward the backstabber
@@ -1757,7 +1790,7 @@ class HeistButtonView(discord.ui.View):
                 backstabber, loot_change=stolen_total, won=True, betrayed_others=True
             )
             messages.append(
-                f"🗡️ {backstabber.mention} **betrayed the crew** and stole a total of **${stolen_total:,}**!"
+                f"🗡️ {backstabber.mention} **betrayed the crew** and stole a total of **${stolen_total:,.2f}**!"
             )
 
         else:
@@ -1777,11 +1810,11 @@ class HeistButtonView(discord.ui.View):
                 if result == "win":
                     balance += scaled_amount
                     win_messages = [
-                        f"🤑 {user.mention} cracked the vault and grabbed **${scaled_amount:,}**!",
-                        f"💼 {user.mention} disguised as a janitor and snuck away with **${scaled_amount:,}**!",
-                        f"🏎️ {user.mention} drifted away in a getaway car with **${scaled_amount:,}**!",
-                        f"🎭 {user.mention} pulled off an Oscar-worthy act and pocketed **${scaled_amount:,}**!",
-                        f"🕵️ {user.mention} hacked the security system and stole **${scaled_amount:,}** unnoticed!",
+                        f"🤑 {user.mention} cracked the vault and grabbed **${scaled_amount:,.2f}**!",
+                        f"💼 {user.mention} disguised as a janitor and snuck away with **${scaled_amount:,.2f}**!",
+                        f"🏎️ {user.mention} drifted away in a getaway car with **${scaled_amount:,.2f}**!",
+                        f"🎭 {user.mention} pulled off an Oscar-worthy act and pocketed **${scaled_amount:,.2f}**!",
+                        f"🕵️ {user.mention} hacked the security system and stole **${scaled_amount:,.2f}** unnoticed!",
                     ]
                     outcome = random.choice(win_messages)
                     update_user_heist_stats(user, loot_change=scaled_amount, won=True)
@@ -1794,11 +1827,11 @@ class HeistButtonView(discord.ui.View):
                         reduced_loss = int(scaled_amount * 0.25)
                     balance = max(0, balance - reduced_loss)
                     lose_messages = [
-                        f"🚨 {user.mention} tripped the alarm and lost **${reduced_loss:,}**!",
-                        f"🔒 {user.mention} got locked in the vault and dropped **${reduced_loss:,}** trying to escape!",
-                        f"👮 {user.mention} ran into a guard and fumbled **${reduced_loss:,}**!",
-                        f"🧨 {user.mention} triggered a booby trap and lost **${reduced_loss:,}** in the chaos!",
-                        f"🐶 {user.mention} was chased by the security dog and had to drop **${reduced_loss:,}** to distract it!",
+                        f"🚨 {user.mention} tripped the alarm and lost **${reduced_loss:,.2f}**!",
+                        f"🔒 {user.mention} got locked in the vault and dropped **${reduced_loss:,.2f}** trying to escape!",
+                        f"👮 {user.mention} ran into a guard and fumbled **${reduced_loss:,.2f}**!",
+                        f"🧨 {user.mention} triggered a booby trap and lost **${reduced_loss:,.2f}** in the chaos!",
+                        f"🐶 {user.mention} was chased by the security dog and had to drop **${reduced_loss:,.2f}** to distract it!",
                     ]
                     outcome = random.choice(lose_messages)
                     update_user_heist_stats(user, loot_change=-reduced_loss, won=False)
@@ -2387,7 +2420,7 @@ class HighLowView(View):
             await interaction.response.edit_message(
                 content=(
                     f"❌ The next number was **{next_number}**. You guessed **{guess}** and lost.\n"
-                    f"You lost your **${self.wager:,}** bet."
+                    f"You lost your **${self.wager:,.2f}** bet."
                 ),
                 view=None,  # Disable all buttons after losing
             )
@@ -2423,7 +2456,7 @@ class HighLowView(View):
         await interaction.response.edit_message(
             content=(
                 f"💰 You cashed out with a multiplier of **x{self.multiplier:.2f}**!\n"
-                f"You won **${winnings:,}** from your original bet of **${self.wager:,}**."
+                f"You won **${winnings:,.2f}** from your original bet of **${self.wager:,.2f}**."
             ),
             view=None,
         )
@@ -2482,11 +2515,11 @@ class RouletteButtons(discord.ui.View):
             else:
                 payout = self.amount * 14
             self.balance += payout - self.amount
-            result = f"🎉 It landed on **{roll.upper()}**! You won **{payout-self.amount:,}** coins!"
+            result = f"🎉 It landed on **{roll.upper()}**! You won **{payout-self.amount:,.2f}** coins!"
             update_user_roulette_stats(self.user, "win", payout - self.amount)
         else:
             self.balance -= self.amount
-            result = f"💀 It landed on **{roll.upper()}**. You lost **{self.amount:,}** coins."
+            result = f"💀 It landed on **{roll.upper()}**. You lost **{self.amount:,.2f}** coins."
             update_user_roulette_stats(self.user, "lose", self.amount)
 
         # Update database
@@ -2503,8 +2536,8 @@ class RouletteButtons(discord.ui.View):
             title="🎡 Roulette Result", description=result, color=color_map[roll]
         )
 
-        embed.add_field(name="Prev Balance", value=f"${prev_balance:,}", inline=True)
-        embed.add_field(name="New Balance", value=f"${self.balance:,}", inline=True)
+        embed.add_field(name="Prev Balance", value=f"${prev_balance:,.2f}", inline=True)
+        embed.add_field(name="New Balance", value=f"${self.balance:,.2f}", inline=True)
         result_value = (
             f"+${abs(self.balance - prev_balance):,.2f}"
             if self.balance >= prev_balance
@@ -2561,7 +2594,7 @@ class PlayAgainButton(discord.ui.Button):
         _, current_balance = balance_of_player(interaction.user)
         if current_balance < self.amount:
             await interaction.response.send_message(
-                f"❌ You don't have enough balance to play again.\nRequired: {self.amount:,}, Your Balance: {current_balance:,}",
+                f"❌ You don't have enough balance to play again.\nRequired: {self.amount:,.2f}, Your Balance: {current_balance:,.2f}",
                 ephemeral=True,
             )
             return
@@ -2569,7 +2602,7 @@ class PlayAgainButton(discord.ui.Button):
         # Restart the game
         view = RouletteButtons(self.user, self.amount, current_balance)
         await interaction.response.edit_message(
-            content=f"🎯 Choose your color to bet **{self.amount:,}** coins!", view=view
+            content=f"🎯 Choose your color to bet **{self.amount:,.2f}** coins!", view=view
         )
         self.view.stop()
 

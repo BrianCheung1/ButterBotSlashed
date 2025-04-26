@@ -209,6 +209,12 @@ async def all_stats_embed(member: discord.Member) -> discord.Embed:
             False,
         ),
         (
+            "⚔️ Duels",
+            f"**Won:** {stats['duel']['won']} | **Lost:** {stats['duel']['lost']} | **Ties:** {stats['duel']['ties']} | **Played:** {stats['duel']['played']}\n"
+            f"**Amount Won:** ${stats['duel']['total_amount_won']:,} | **Amount Lost:** ${stats['duel']['total_amount_lost']:,}",
+            False,
+        ),
+        (
             "🧠 Wordle",
             f"**Won:** {stats['wordle']['won']} | **Lost:** {stats['wordle']['lost']} | **Played:** {stats['wordle']['played']}",
             False,

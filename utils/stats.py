@@ -245,23 +245,43 @@ def duel_stats(user: discord.User, opponent: discord.User = None):
             "losses": vs_stats.get("lose", 0),
             "ties": vs_stats.get("tie", 0),
             "total": sum(vs_stats.get(key, 0) for key in ("win", "lose", "tie")),
+            "amount_won": vs_stats.get("amount_won", 0),
+            "amount_lost": vs_stats.get("amount_lost", 0),
         }
     else:
-        wins = losses = ties = 0
+        wins = losses = ties = amount_won = amount_lost = 0
         for record in duel_data.values():
             wins += record.get("win", 0)
             losses += record.get("lose", 0)
             ties += record.get("tie", 0)
+            amount_won += record.get("amount_won", 0)
+            amount_lost += record.get("amount_lost", 0)
+
         return {
             "duels_won": wins,
             "duels_lost": losses,
             "duels_tied": ties,
             "duels_played": wins + losses + ties,
+            "total_amount_won": amount_won,
+            "total_amount_lost": amount_lost,
         }
 
 
 def all_stats(member: discord.Member):
     user_data = get_user_data(member)
+
+    duel_stats = user_data.get("duel_stats", {})
+    total_duels_won = total_duels_lost = total_amount_won = total_amount_lost = (
+        total_duels_tied
+    ) = total_duels_played = 0
+    for record in duel_stats.values():
+        total_duels_won += record.get("win", 0)
+        total_duels_lost += record.get("lose", 0)
+        total_duels_tied += record.get("tie", 0)
+        total_amount_won += record.get("amount_won", 0)
+        total_amount_lost += record.get("amount_lost", 0)
+
+    total_duels_played = total_duels_won + total_duels_lost + total_duels_tied
 
     return {
         "gamble": {
@@ -284,6 +304,14 @@ def all_stats(member: discord.Member):
             "played": user_data.get("slots_played", 0),
             "total_winnings": user_data.get("slots_total_winnings", 0),
             "total_losses": user_data.get("slots_total_losses", 0),
+        },
+        "duel": {
+            "played": total_duels_played,
+            "won": total_duels_won,
+            "lost": total_duels_lost,
+            "ties": total_duels_tied,
+            "total_amount_won": total_amount_won,
+            "total_amount_lost": total_amount_lost,
         },
         "wordle": {
             "won": user_data.get("wordles_won", 0),
@@ -404,20 +432,24 @@ def update_user_heist_stats(
 def update_user_duel_stats(
     user: discord.User,
     opponent: discord.User,
-    result: str,
-    balance_change: int = 0,  # 'win', 'lose', or 'tie'
+    result: str,  # 'win', 'lose', or 'tie'
+    balance_change: int = 0,
 ):
     user_data = get_user_data(user)
+    opponent_id = str(opponent.id)
 
-    field = f"duel_stats.{opponent.id}.{result}"
+    base_path = f"duel_stats.{opponent_id}"
+    update_query = {"$inc": {f"{base_path}.{result}": 1}}
 
-    # Build the update query
-    update_query = {"$inc": {field: 1}}
-
-    if balance_change != 0:
+    if balance_change > 0:
+        # User won this amount from the opponent
+        update_query["$inc"][f"{base_path}.amount_won"] = balance_change
         update_query["$inc"]["balance"] = balance_change
+    elif balance_change < 0:
+        # User lost this amount to the opponent
+        update_query["$inc"][f"{base_path}.amount_lost"] = abs(balance_change)
+        update_query["$inc"]["balance"] = balance_change  # still apply to balance
 
-    # Perform the update
     collection.update_one({"_id": user.id}, update_query)
 
 
@@ -905,4 +937,4 @@ def apply_shop_item_effect(user, item_key):
     if item_key == "bank_upgrade":
         current_cap = user_data.get("bank_cap", 1000000)
         current_level = user_data.get("bank_level", 1)
-        update_user_bank_stats(user, 0, current_cap + 250_000, current_level + 1)
+        update_user_bank_stats(user, 0, current_cap + 500_000, current_level + 1)
