@@ -34,6 +34,7 @@ from utils.stats import (
     update_user_steal_stats,
     duel_stats,
     apply_shop_item_effect,
+    get_user_data,
 )
 from utils.shop import SHOP_ITEMS
 
@@ -423,17 +424,7 @@ class Economy(commands.Cog):
         )
 
     @app_commands.command(name="heist", description="Join a heist to rob the bank!")
-    @app_commands.describe(difficulty="Choose the difficulty: easy, medium, or hard.")
-    @app_commands.choices(
-        difficulty=[
-            app_commands.Choice(name="easy", value="easy"),
-            app_commands.Choice(name="medium", value="medium"),
-            app_commands.Choice(name="hard", value="hard"),
-        ]
-    )
-    async def heist(
-        self, interaction: discord.Interaction, difficulty: app_commands.Choice[str]
-    ):
+    async def heist(self, interaction: discord.Interaction):
         user_id = interaction.user.id
 
         # Prevent duplicate heists
@@ -451,13 +442,11 @@ class Economy(commands.Cog):
             return
 
         self.active_heist_creators.add(user_id)
-        difficulty_value = difficulty.value.lower()
-        view = HeistButtonView(
-            interaction, self.active_heist_users, difficulty=difficulty_value
-        )
+
+        view = HeistButtonView(interaction, self.active_heist_users)
 
         await interaction.response.send_message(
-            f"💣 A heist is being planned at **{difficulty_value.title()}** difficulty! Click below to join...",
+            f"💣 A heist is being planned! Click below to join...",
             view=view,
         )
         followup_message = await interaction.original_response()
@@ -465,7 +454,7 @@ class Economy(commands.Cog):
         # Countdown task to update the message
         async def countdown_task():
             key_moments = [60, 30, 10, 5, 4, 3, 2, 1]
-            countdown_message = f"💣 A heist is being planned at **{difficulty_value.title()}** difficulty!"
+            countdown_message = f"💣 A heist is being planned!"
 
             for remaining in range(60, 0, -1):
                 if remaining in key_moments:
@@ -498,30 +487,6 @@ class Economy(commands.Cog):
 
         # Wait for the view to finish (either the timeout or when the button is clicked)
         await view.wait()
-
-    # @app_commands.command(name="highlow", description="Play a game of High-Low!")
-    # @app_commands.describe(amount="The amount of money you want to wager")
-    # async def highlow(
-    #     self, interaction: discord.Interaction, amount: app_commands.Range[int, 1, None]
-    # ):
-    #     user_id = interaction.user
-    #     # Replace with your own balance checker
-    #     prev_balance, balance = balance_of_player(user_id)
-
-    #     if amount > balance:
-    #         return await interaction.response.send_message(
-    #             "You don't have enough money!", ephemeral=True
-    #         )
-
-    #     start_number = random.randint(1, 100)
-    #     view = HighLowView(interaction.user, amount, start_number)
-
-    #     await interaction.response.send_message(
-    #         f"🎲 Starting number is **{start_number}** (range: 1–100).\n"
-    #         f"Will the next number be higher or lower?\n"
-    #         f"Wager: **${amount:,.2f}**",
-    #         view=view,
-    #     )
 
     @app_commands.command(
         name="duelstats", description="Check your duel stats or against another member"
@@ -1601,76 +1566,57 @@ class LeaderboardButton(discord.ui.View):
 
 
 class HeistButtonView(discord.ui.View):
-    def __init__(
-        self,
-        interaction: discord.Interaction,
-        active_heist_users: set[int],
-        difficulty: str = "medium",
-    ):
+    def __init__(self, interaction: discord.Interaction, active_heist_users: set[int]):
         super().__init__()
         self.initiator = interaction
         self.participants = []
-        self.difficulty = difficulty.lower()
         self.active_heist_users = active_heist_users
 
+    def get_dynamic_win_chance(self):
+        """Calculate win chance dynamically based on the number of participants."""
+        num_participants = len(self.participants)
+
+        if num_participants == 1:
+            return 0.25  # -15% EV for 1 player
+        elif num_participants == 2:
+            return 0.30  # -10% EV for 2 players
+        elif num_participants == 3:
+            return 0.35  # -5% EV for 3 players
+        else:
+            return 0.40  # 5% EV for 4+ players
+
     def get_settings(self):
-        if self.difficulty == "easy":
-            return {
-                "win_chance": 0.60,
-                "min_amount": 1000,
-                "max_amount": 2500,
-                "backstab_chance": 0.1,
-            }
-        elif self.difficulty == "hard":
-            return {
-                "win_chance": 0.20,
-                "min_amount": 10000,
-                "max_amount": 20000,
-                "backstab_chance": 0.025,
-            }
-        else:  # Default to medium
-            return {
-                "win_chance": 0.40,
-                "min_amount": 7500,
-                "max_amount": 10000,
-                "backstab_chance": 0.05,
-            }
+        win_chance = self.get_dynamic_win_chance()  # Get dynamic win chance
+        return {
+            "win_chance": win_chance,  # Use dynamic win chance
+            "min_amount": 7500,
+            "max_amount": 10000,
+            "backstab_chance": 0.05,
+            "loss_multiplier": 0.6,
+            "balance_percent": 0.025,
+        }
 
     def check_balance(self, user: discord.User):
         """Checks if the user has enough balance to participate in the heist."""
         user_data = collection.find_one({"_id": user.id}) or {"balance": 0}
         balance = user_data.get("balance", 0)
 
-        # Define the minimum required percentage based on difficulty
-        difficulty_percent = {"easy": 0.025, "medium": 0.10, "hard": 0.20}
-
-        percent = difficulty_percent.get(self.difficulty, 0.10)  # Default to medium
-        min_required_balance = int(balance * percent)
-
-        # To prevent requiring 0 balance if user has very low balance
+        settings = self.get_settings()
         min_required_balance = max(
-            min_required_balance, self.get_settings()["min_amount"]
+            int(balance * settings["balance_percent"]), settings["min_amount"]
         )
 
         return balance >= min_required_balance, balance, min_required_balance
 
-    def get_scaled_amount(self, user: discord.User, amount: int):
-        """Scales the reward/penalty based on the player's balance and difficulty."""
+    def get_scaled_amount(self, user: discord.User):
+        """Scales the reward/penalty based on the player's balance."""
         user_data = collection.find_one({"_id": user.id}) or {"balance": 0}
         balance = user_data.get("balance", 0)
 
-        # Define percentage multiplier based on difficulty
-        difficulty_percent = {
-            "easy": 0.025,
-            "medium": 0.10,
-            "hard": 0.20,
-        }
-
         settings = self.get_settings()
-        percent = difficulty_percent.get(self.difficulty, 0.10)  # Default to medium
-
-        scaled_amount = int(balance * percent)
-        scaled_amount = max(settings["min_amount"], scaled_amount)
+        scaled_amount = max(
+            int(balance * settings["balance_percent"]), settings["min_amount"]
+        )
 
         return scaled_amount
 
@@ -1680,7 +1626,6 @@ class HeistButtonView(discord.ui.View):
     ):
         user = interaction.user
 
-        # Check if the user is already in an active heist
         if user.id in self.active_heist_users:
             await interaction.response.send_message(
                 "🚫 You are already in an active heist and cannot join another one.",
@@ -1700,9 +1645,7 @@ class HeistButtonView(discord.ui.View):
             )
             return
 
-        # Check user's balance before adding them to the heist
         can_join, balance, min_required_balance = self.check_balance(user)
-
         if not can_join:
             await interaction.response.send_message(
                 f"🚫 You need at least **${min_required_balance:,.2f}** to join the heist. You only have **${balance:,.2f}**.",
@@ -1714,13 +1657,10 @@ class HeistButtonView(discord.ui.View):
         self.active_heist_users.add(user.id)
         await interaction.response.send_message(f"{user.mention} has joined the heist!")
 
-        # If there are enough participants, stop accepting more
         if len(self.participants) >= 10:
             self.stop()
 
     async def on_finish(self):
-
-        # Clear all users after the heist finishes
         for user in self.participants:
             self.active_heist_users.discard(user.id)
 
@@ -1728,33 +1668,11 @@ class HeistButtonView(discord.ui.View):
             await self.initiator.followup.send("⏰ The heist timed out! No one joined.")
             return
 
-        # Check that all participants still have enough balance before proceeding with the heist
-        for user in self.participants[:]:
-            can_participate, balance, min_required_balance = self.check_balance(user)
-            if not can_participate:
-                await self.initiator.followup.send(
-                    f"🚫 {user.mention} no longer has enough balance to participate and has been removed from the heist."
-                )
-                self.participants.remove(user)
-
-        if not self.participants:
-            await self.initiator.followup.send(
-                "⏰ All participants were removed due to insufficient balance. The heist is canceled."
-            )
-            return
-
         settings = self.get_settings()
-        base_win_chance = settings["win_chance"]
-        bonus_per_person = 0.02  # 2% per participant
-        extra_chance = min(
-            bonus_per_person * len(self.participants), 0.25
-        )  # Cap at 25%
-        win_chance = min(base_win_chance + extra_chance, 0.95)  # Cap total at 95%
+        win_chance = settings["win_chance"]  # Get win chance from settings
+        is_backstab = random.random() < settings["backstab_chance"]
 
         messages = []
-        min_amount = settings["min_amount"]
-        max_amount = settings["max_amount"]
-        is_backstab = random.random() < settings["backstab_chance"]
 
         if is_backstab and len(self.participants) > 1:
             backstabber = random.choice(self.participants)
@@ -1765,10 +1683,11 @@ class HeistButtonView(discord.ui.View):
                 balance = user_data.get("balance", 0)
 
                 if user == backstabber:
-                    # We'll calculate their stolen loot after the loop
                     continue
 
-                stolen_amount = random.randint(min_amount, max_amount)
+                stolen_amount = random.randint(
+                    settings["min_amount"], settings["max_amount"]
+                )
                 stolen_total += stolen_amount
                 balance = max(0, balance - stolen_amount)
 
@@ -1779,7 +1698,6 @@ class HeistButtonView(discord.ui.View):
                     f"🩸 {user.mention} was betrayed and lost **${stolen_amount:,.2f}**!"
                 )
 
-            # Reward the backstabber
             backstabber_data = collection.find_one({"_id": backstabber.id}) or {
                 "balance": 0
             }
@@ -1796,13 +1714,9 @@ class HeistButtonView(discord.ui.View):
         else:
             for user in self.participants:
                 result = random.choices(
-                    ["win", "lose"],
-                    weights=[win_chance, 1 - win_chance],
+                    ["win", "lose"], weights=[win_chance, 1 - win_chance]
                 )[0]
-                amount = random.randint(min_amount, max_amount)
-
-                # Scale the amount based on the user's balance
-                scaled_amount = self.get_scaled_amount(user, amount)
+                scaled_amount = self.get_scaled_amount(user)
 
                 user_data = collection.find_one({"_id": user.id}) or {"balance": 0}
                 balance = user_data.get("balance", 0)
@@ -1813,25 +1727,17 @@ class HeistButtonView(discord.ui.View):
                         f"🤑 {user.mention} cracked the vault and grabbed **${scaled_amount:,.2f}**!",
                         f"💼 {user.mention} disguised as a janitor and snuck away with **${scaled_amount:,.2f}**!",
                         f"🏎️ {user.mention} drifted away in a getaway car with **${scaled_amount:,.2f}**!",
-                        f"🎭 {user.mention} pulled off an Oscar-worthy act and pocketed **${scaled_amount:,.2f}**!",
-                        f"🕵️ {user.mention} hacked the security system and stole **${scaled_amount:,.2f}** unnoticed!",
                     ]
                     outcome = random.choice(win_messages)
                     update_user_heist_stats(user, loot_change=scaled_amount, won=True)
+
                 else:
-                    if self.difficulty == "easy":
-                        reduced_loss = int(scaled_amount * 0.55)
-                    elif self.difficulty == "medium":
-                        reduced_loss = int(scaled_amount * 0.35)
-                    else:
-                        reduced_loss = int(scaled_amount * 0.25)
+                    reduced_loss = int(scaled_amount * settings["loss_multiplier"])
                     balance = max(0, balance - reduced_loss)
                     lose_messages = [
                         f"🚨 {user.mention} tripped the alarm and lost **${reduced_loss:,.2f}**!",
                         f"🔒 {user.mention} got locked in the vault and dropped **${reduced_loss:,.2f}** trying to escape!",
                         f"👮 {user.mention} ran into a guard and fumbled **${reduced_loss:,.2f}**!",
-                        f"🧨 {user.mention} triggered a booby trap and lost **${reduced_loss:,.2f}** in the chaos!",
-                        f"🐶 {user.mention} was chased by the security dog and had to drop **${reduced_loss:,.2f}** to distract it!",
                     ]
                     outcome = random.choice(lose_messages)
                     update_user_heist_stats(user, loot_change=-reduced_loss, won=False)
@@ -1874,7 +1780,12 @@ class DuelAcceptView(discord.ui.View):
         self.stop()
 
 
-async def run_mining_logic(user: discord.User) -> tuple[str, int, int, int, int, int]:
+async def run_mining_logic(user: discord.User, user_data: dict = None) -> tuple:
+
+    # Only fetch user_data if not passed in
+    if user_data is None:
+        user_data = get_user_data(user)  # ONE database call if needed
+
     common_blocks = [
         "dirt",
         "sand",
@@ -1885,7 +1796,6 @@ async def run_mining_logic(user: discord.User) -> tuple[str, int, int, int, int,
         "granite",
         "diorite",
     ]
-
     common_ores = [
         "coal",
         "redstone",
@@ -1896,7 +1806,6 @@ async def run_mining_logic(user: discord.User) -> tuple[str, int, int, int, int,
         "charcoal",
         "clay",
     ]
-
     uncommon_ores = [
         "iron",
         "gold",
@@ -1908,7 +1817,6 @@ async def run_mining_logic(user: discord.User) -> tuple[str, int, int, int, int,
         "honeycomb",
         "quartz block",
     ]
-
     rare_ores = [
         "diamond",
         "emerald",
@@ -1919,7 +1827,6 @@ async def run_mining_logic(user: discord.User) -> tuple[str, int, int, int, int,
         "prismarine shard",
         "enchanted golden apple",
     ]
-
     epic_ores = [
         "ancient debris",
         "netherite scrap",
@@ -1931,8 +1838,16 @@ async def run_mining_logic(user: discord.User) -> tuple[str, int, int, int, int,
         "dragon head",
     ]
 
-    prev_balance, balance = balance_of_player(user)
-    stats = mine_stats(user)
+    balance = user_data["balance"]
+
+    stats = {
+        "mining_level": user_data.get("mining_level", 1),
+        "mining_xp": user_data.get("mining_xp", 0),
+        "next_level_xp": user_data.get("next_level_xp", 50),
+    }
+
+    inventory = user_data.get("inventory", [])
+
     current_level = stats["mining_level"]
     current_xp = stats["mining_xp"]
     choice = random.randint(0, 101)
@@ -1971,7 +1886,6 @@ async def run_mining_logic(user: discord.User) -> tuple[str, int, int, int, int,
         payout = random.randint(1500, 2000)
         mining_result = f"epic loot: {random.choice(epic_ores)}, {random.choice(rare_ores)}, {random.choice(uncommon_ores)}, {random.choice(common_ores)}, and {random.choice(common_blocks)}"
 
-    inventory = get_user_inventory(user)  # returns dict[str, dict]
     pickaxe_types = [
         "wood",
         "stone",
@@ -1997,23 +1911,17 @@ async def run_mining_logic(user: discord.User) -> tuple[str, int, int, int, int,
         "netherite": 10,
     }
 
-    # Default to fist
     best_pickaxe = "fist"
     highest_bonus = 0.0
 
-    # Loop through each item in the inventory
     for item in inventory:
         pickaxe_name = item["name"].lower()
-
         for ptype in pickaxe_types:
-            # Compare pickaxe name with formatted pickaxe type
             if pickaxe_name == f"{ptype} pickaxe":
-                bonus = PICKAXE_BONUSES.get(
-                    ptype, 0
-                )  # Get the bonus, default to 0 if not found
+                bonus = PICKAXE_BONUSES.get(ptype, 0)
                 if bonus > highest_bonus:
                     highest_bonus = bonus
-                    best_pickaxe = ptype  # Assign the pickaxe type
+                    best_pickaxe = ptype
 
     pickaxe = best_pickaxe
     pickaxe_bonus_percentage = highest_bonus
@@ -2056,9 +1964,10 @@ async def run_mining_logic(user: discord.User) -> tuple[str, int, int, int, int,
 
 class MineAgainView(discord.ui.View):
     def __init__(self, user: discord.User):
-        super().__init__(timeout=300)  # Set timeout duration
+        super().__init__(timeout=300)
         self.user = user
-        self.click_count = 0  # Initialize click counter
+        self.click_count = 0
+        self.user_data = get_user_data(user)  # Cache it ONCE at creation
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.user.id:
@@ -2072,16 +1981,16 @@ class MineAgainView(discord.ui.View):
     async def mine_again(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
-        self.click_count += 1  # Increment click count
+        await interaction.response.defer()
+        self.click_count += 1
 
-        if self.click_count >= 500:  # Disable button after 500 clicks
+        if self.click_count >= 500:
             button.disabled = True
             await interaction.response.edit_message(
                 content="The button has been disabled after 500 clicks.", view=self
             )
             return
 
-        # Call the mining logic
         (
             result,
             payout,
@@ -2095,7 +2004,7 @@ class MineAgainView(discord.ui.View):
             reward_message,
             pickaxe,
             pickaxe_bonus,
-        ) = await run_mining_logic(self.user)
+        ) = await run_mining_logic(self.user, self.user_data)
 
         if payout > 0:
             msg = (
@@ -2120,13 +2029,22 @@ class MineAgainView(discord.ui.View):
             )
         msg += f"\n{reward_message}"
 
-        # Update the message after the mining logic is completed
-        await interaction.response.edit_message(content=msg)
+        # Optionally update self.user_data if needed
+        self.user_data["balance"] = new_balance
+        self.user_data["mining_level"] = new_level
+        self.user_data["mining_xp"] = xp
+        self.user_data["next_level_xp"] = xp_needed
+
+        await interaction.edit_original_response(content=msg)
 
 
 async def run_fishing_logic(
-    user: discord.User,
+    user: discord.User, user_data: dict = None
 ) -> tuple[str, int, int, int, int, int, int, int]:
+    # Only fetch user_data if not passed in
+    if user_data is None:
+        user_data = get_user_data(user)  # ONE database call if needed
+
     common_fish = [
         "cod",
         "salmon",
@@ -2177,16 +2095,16 @@ async def run_fishing_logic(
         "muddy sock",
     ]
 
-    prev_balance, balance = balance_of_player(user)
-    stats = fish_stats(user)
-    current_level = stats["fishing_level"]
-    current_xp = stats["fishing_xp"]
+    balance = user_data["balance"]
+    current_level = user_data["fishing_level"]
+    current_xp = user_data["fishing_xp"]
 
     choice = random.randint(0, 101)
     fishing_result = ""
     payout = 0
     loss = 0
 
+    # Chance-based fishing outcomes
     if choice < 5:
         fishing_result = random.choice(trash)
         loss = random.randint(25, 75)
@@ -2204,12 +2122,10 @@ async def run_fishing_logic(
         fishing_result = random.choice(epic_fish)
     elif choice == 101:
         payout = random.randint(1500, 2000)
-        fishing_result = (
-            f"legendary haul: {random.choice(epic_fish)}, {random.choice(rare_fish)}, "
-            f"{random.choice(uncommon_fish)}, and {random.choice(common_fish)}"
-        )
+        fishing_result = f"legendary haul: {random.choice(epic_fish)}, {random.choice(rare_fish)}, {random.choice(uncommon_fish)}, and {random.choice(common_fish)}"
 
-    inventory = get_user_inventory(user)  # returns dict[str, dict]
+    # Fishing Rod Bonuses
+    inventory = user_data["inventory"]
     fishing_rod_types = [
         "wood",
         "stone",
@@ -2235,27 +2151,22 @@ async def run_fishing_logic(
         "netherite": 10,
     }
 
-    # Default to fist
     best_rod = "fist"
     highest_bonus = 0.0
 
-    # Loop through each item in the inventory
     for item in inventory:
         item_name = item["name"].lower()  # Assuming 'name' key exists in item
-
         for rod_type in fishing_rod_types:
-            # Compare item name with formatted rod type
             if item_name == f"{rod_type} fishing rod":
-                bonus = FISHING_ROD_BONUSES.get(
-                    rod_type, 0
-                )  # Get the bonus, default to 0 if not found
+                bonus = FISHING_ROD_BONUSES.get(rod_type, 0)
                 if bonus > highest_bonus:
                     highest_bonus = bonus
-                    best_rod = rod_type  # Assign the rod type
+                    best_rod = rod_type  # Update to the highest bonus rod
 
     fishing_rod = best_rod
     fishing_rod_bonus_percentage = highest_bonus
 
+    # Calculate XP and bonuses
     xp_gain = random.randint(5, 10)
     bonus_percentage = 0.02
     level_bonus = int(payout * bonus_percentage * current_level)
@@ -2264,6 +2175,7 @@ async def run_fishing_logic(
 
     balance_change = total_payout if payout > 0 else -loss if loss > 0 else 0
 
+    # Update user data after fishing
     new_level, current_xp, xp_needed, reward_message = update_user_fish_stats(
         user, xp_gain, balance_change
     )
@@ -2289,6 +2201,7 @@ class FishAgainView(discord.ui.View):
         super().__init__(timeout=300)
         self.user = user
         self.click_count = 0
+        self.user_data = get_user_data(user)  # Cache user data ONCE
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.user.id:
@@ -2302,6 +2215,7 @@ class FishAgainView(discord.ui.View):
     async def fish_again(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
+        await interaction.response.defer()
         self.click_count += 1
 
         if self.click_count >= 500:
@@ -2324,8 +2238,9 @@ class FishAgainView(discord.ui.View):
             reward_message,
             fishing_rod,
             fishing_rod_bonus,
-        ) = await run_fishing_logic(self.user)
+        ) = await run_fishing_logic(self.user, self.user_data)
 
+        # Construct the message for the user based on payout, loss, or no gain
         if payout > 0:
             msg = (
                 f"{interaction.user.mention} caught **{result}**, worth ${payout:,.2f}!\n"
@@ -2349,7 +2264,7 @@ class FishAgainView(discord.ui.View):
             )
         msg += f"\n{reward_message}"
 
-        await interaction.response.edit_message(content=msg, view=self)
+        await interaction.edit_original_response(content=msg)
 
 
 class HighLowView(View):
