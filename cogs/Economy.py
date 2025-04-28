@@ -1424,7 +1424,7 @@ class Economy(commands.Cog):
 
 class StealStatusButton(discord.ui.View):
     def __init__(self, interaction: discord.Interaction, pages: list):
-        super().__init__(timeout=None)
+        super().__init__(timeout=300)
         self.interaction = interaction
         self.pages = pages
         self.count = 0
@@ -1543,7 +1543,7 @@ class StealStatusButton(discord.ui.View):
 
 class LeaderboardButton(discord.ui.View):
     def __init__(self, interaction: discord.Interaction, pages: list, refresh_func):
-        super().__init__(timeout=None)
+        super().__init__(timeout=300)
         self.interaction = interaction
         self.pages = pages
         self.refresh_func = refresh_func
@@ -2056,7 +2056,7 @@ async def run_mining_logic(user: discord.User) -> tuple[str, int, int, int, int,
 
 class MineAgainView(discord.ui.View):
     def __init__(self, user: discord.User):
-        super().__init__(timeout=None)  # Set timeout duration
+        super().__init__(timeout=300)  # Set timeout duration
         self.user = user
         self.click_count = 0  # Initialize click counter
 
@@ -2286,7 +2286,7 @@ async def run_fishing_logic(
 
 class FishAgainView(discord.ui.View):
     def __init__(self, user: discord.User):
-        super().__init__(timeout=None)
+        super().__init__(timeout=300)
         self.user = user
         self.click_count = 0
 
@@ -2464,7 +2464,7 @@ class HighLowView(View):
 
 class RouletteButtons(discord.ui.View):
     def __init__(self, user: discord.User, amount: int, balance: int):
-        super().__init__(timeout=None)
+        super().__init__(timeout=300)
         self.user = user
         self.amount = amount
         self.balance = balance
@@ -2602,14 +2602,15 @@ class PlayAgainButton(discord.ui.Button):
         # Restart the game
         view = RouletteButtons(self.user, self.amount, current_balance)
         await interaction.response.edit_message(
-            content=f"🎯 Choose your color to bet **{self.amount:,.2f}** coins!", view=view
+            content=f"🎯 Choose your color to bet **{self.amount:,.2f}** coins!",
+            view=view,
         )
         self.view.stop()
 
 
 class RPSView(discord.ui.View):
     def __init__(self, challenger, opponent, amount, is_bot):
-        super().__init__(timeout=None)
+        super().__init__(timeout=300)
         self.challenger = challenger
         self.opponent = opponent
         self.amount = amount
