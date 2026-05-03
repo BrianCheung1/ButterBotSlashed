@@ -492,8 +492,10 @@ def update_user_steal_stats(
     collection.update_one({"_id": user.id}, update_fields, upsert=True)
 
 
-def update_user_mine_stats(user: discord.User, xp_gain: int, balance_change: int):
-    user_data = get_user_data(user)
+def update_user_mine_stats(
+    user: discord.User, xp_gain: int, balance_change: int, user_data: dict
+):
+    # user_data = get_user_data(user)
 
     current_xp = user_data.get("mining_xp", 0) + xp_gain
     base_xp = 50
@@ -510,7 +512,7 @@ def update_user_mine_stats(user: discord.User, xp_gain: int, balance_change: int
         xp_for_next = int(base_xp * (new_level**exponent))
 
     # Cap the level at 99
-    new_level = min(new_level, 99)
+    new_level = min(new_level, 199)
 
     # XP needed for next level
     next_level_xp = int(base_xp * ((new_level) ** exponent))
@@ -556,7 +558,7 @@ def update_user_fish_stats(user: discord.User, xp_gain: int, balance_change: int
         xp_for_next = int(base_xp * (new_level**exponent))
 
     # Cap the level at 99
-    new_level = min(new_level, 99)
+    new_level = min(new_level, 199)
 
     # XP needed for next level
     next_level_xp = int(base_xp * ((new_level) ** exponent))
@@ -751,13 +753,6 @@ def reward_player_for_level_up(user: discord.User, level, type="mining"):
                     user, tool_name, 1, rarity_map[name], milestone_level, "tool"
                 )
                 milestone_messages.append(reward_msg)
-
-    # Extra reward every 10 levels (excluding levels with pickaxes)
-    for l in range(30, level + 1, 10):
-        if l not in milestone_rewards:
-            crate_name = "Mystery Crate"
-            reward_msg = add_item_to_inventory(user, crate_name, 1, "rare", l, "crate")
-            milestone_messages.append(f"🎁 {crate_name} awarded at level {l}!")
 
     if milestone_messages:
         message = "\n".join(milestone_messages)

@@ -55,6 +55,8 @@ class Economy(commands.Cog):
         self.active_duels = set()
         self.active_rps_players = set()
         self.add_interest.start()
+        self.active_mining_sessions = set()
+        self.fishing_sessions = set()
 
     @app_commands.command(name="give", description="Give users money")
     @app_commands.describe(
@@ -107,6 +109,9 @@ class Economy(commands.Cog):
     @app_commands.command(name="mine", description="Mine ores for money")
     async def mine(self, interaction: discord.Interaction):
         await interaction.response.defer(thinking=True)
+        if interaction.user.id in self.active_mining_sessions:
+            await interaction.followup.send("You are already mining!")
+            return
 
         (
             result,
@@ -121,6 +126,8 @@ class Economy(commands.Cog):
             reward_message,
             pickaxe,
             pickaxe_bonus,
+            xp_gain,
+            balance_change,
         ) = await run_mining_logic(interaction.user)
 
         if payout > 0:
@@ -145,14 +152,18 @@ class Economy(commands.Cog):
                 f"**Current Level:** {new_level}\n**Current XP:** {xp}\n**XP Needed for Next Level:** {xp_needed}"
             )
         msg += f"\n{reward_message}"
+        self.active_mining_sessions.add(interaction.user.id)
 
-        view = MineAgainView(interaction.user)
+        view = MineAgainView(interaction.user, self.active_mining_sessions)
         response_msg = await interaction.followup.send(content=msg, view=view)
         view.message = response_msg  # Set the message AFTER sending
 
     @app_commands.command(name="fish", description="Catch fish for money")
     async def fish(self, interaction: discord.Interaction):
         await interaction.response.defer(thinking=True)
+        if interaction.user.id in self.fishing_sessions:
+            await interaction.followup.send("You are already fishing")
+            return
 
         (
             result,
@@ -167,6 +178,8 @@ class Economy(commands.Cog):
             reward_message,
             fishing_rod,
             fishing_rod_bonus,
+            xp_gain,
+            balance_change,
         ) = await run_fishing_logic(interaction.user)
 
         if payout > 0:
@@ -190,9 +203,9 @@ class Economy(commands.Cog):
                 f"{interaction.user.mention} fished and found **{result}**. No gain, no loss.\n\n"
                 f"**Fishing Level:** {new_level}\n**XP:** {xp}\n**XP Needed for Next Level:** {xp_needed}"
             )
-
+        self.fishing_sessions.add(interaction.user.id)
         msg += f"\n{reward_message}"
-        view = FishAgainView(interaction.user)
+        view = FishAgainView(interaction.user, self.fishing_sessions)
         response_msg = await interaction.followup.send(content=msg, view=view)
         view.message = response_msg  # Set the message AFTER sending
 
@@ -266,7 +279,8 @@ class Economy(commands.Cog):
 
         # Proceed with stealing
         wealth_factor = min(target_balance / 500000, 1.0)
-        success_chance = 0.50 + 0.25 * wealth_factor
+        more_wealth_factor = min(target_balance / 10_000_000, 1.0)
+        success_chance = 0.50 + 0.25 * wealth_factor + 0.10 * more_wealth_factor
         now = datetime.utcnow()
 
         success_messages = [
@@ -293,13 +307,15 @@ class Economy(commands.Cog):
                 (0.10, 0.15),  # Rare
                 (0.15, 0.20),  # Super rare
             ]
-            weights = [70, 20, 7.5, 2.5]  # Adjust to taste — total = 100
+            weights = [85, 10, 4, 1]  # Adjust to taste — total = 100
 
             # Choose a tier based on weight
             low, high = random.choices(tiers, weights=weights, k=1)[0]
 
             # Choose a percent within that tier
             percent = random.uniform(low, high)
+            if target_balance > 1_000_000:
+                percent *= 0.1
             stolen_amount = int(target_balance * percent)
 
             target_balance -= stolen_amount
@@ -401,7 +417,7 @@ class Economy(commands.Cog):
 
         # Calculate the bonus, doubling each streak day
         bonus = base_reward * (2**streak)  # Start at 1 for streak = 0
-        bonus = min(bonus, 250000)  # Cap bonus at $10,000
+        bonus = min(bonus, 1_000_000)  # Cap bonus at $10,000
 
         total_reward = base_reward + bonus
 
@@ -1939,12 +1955,11 @@ async def run_mining_logic(user: discord.User, user_data: dict = None) -> tuple:
     else:
         balance_change = 0
 
-    (
-        new_level,
-        current_xp,
-        xp_needed,
-        reward_message,
-    ) = update_user_mine_stats(user, xp_gain, balance_change)
+    new_level, current_xp, xp_needed, reward_message = update_user_mine_stats(
+        user, xp_gain, balance_change, user_data
+    )
+
+    new_balance = balance + balance_change
 
     return (
         mining_result,
@@ -1952,22 +1967,75 @@ async def run_mining_logic(user: discord.User, user_data: dict = None) -> tuple:
         loss,
         total_payout,
         level_bonus,
-        balance + balance_change,
+        new_balance,
         new_level,
         current_xp,
         xp_needed,
         reward_message,
         pickaxe,
         pickaxe_bonus,
+        xp_gain,
+        balance_change,
     )
 
 
 class MineAgainView(discord.ui.View):
-    def __init__(self, user: discord.User):
+    def __init__(self, user: discord.User, mining_sessions):
         super().__init__(timeout=300)
         self.user = user
         self.click_count = 0
-        self.user_data = get_user_data(user)  # Cache it ONCE at creation
+        self.user_data = get_user_data(user)  # Cached once
+        self.buffered_updates = {"xp_gain": 0, "balance_change": 0}
+        self._flush_task = asyncio.create_task(self.background_flusher())
+        self.mining_sessions = mining_sessions
+        self.color_buttons_added = False
+        self.captcha = False
+
+        # Color unlock logic
+        self.click_threshold = random.randint(
+            50, 75
+        )  # Random threshold between 100 and 200
+        # self.click_threshold = 5
+        self.correct_color = None
+
+    async def on_timeout(self):
+        print(self.mining_sessions)
+        self.mining_sessions.remove(self.user.id)
+        self._flush_task.cancel()
+        # Disable all buttons
+        for item in self.children:
+            if isinstance(item, discord.ui.Button):
+                item.disabled = True
+        await self.message.edit(content="Button timed out/Cooldown Finished", view=self)
+
+        try:
+            await self._flush_task
+        except asyncio.CancelledError:
+            pass
+        await self.flush_updates()
+
+    async def flush_updates(self):
+        if (
+            self.buffered_updates["xp_gain"] == 0
+            and self.buffered_updates["balance_change"] == 0
+        ):
+            return
+        update_user_mine_stats(
+            self.user,
+            self.buffered_updates["xp_gain"],
+            self.buffered_updates["balance_change"],
+            self.user_data,
+        )
+        self.buffered_updates = {"xp_gain": 0, "balance_change": 0}
+
+    async def background_flusher(self):
+        print("running background flusher")
+        try:
+            while not self.is_finished():
+                await asyncio.sleep(10)
+                await self.flush_updates()
+        except asyncio.CancelledError:
+            pass
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.user.id:
@@ -1981,22 +2049,30 @@ class MineAgainView(discord.ui.View):
     async def mine_again(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
+        if self.captcha:
+            return
         await interaction.response.defer()
         self.click_count += 1
 
-        if self.click_count >= 500:
+        if self.click_count >= self.click_threshold:
+            self.captcha = True
             button.disabled = True
-            await interaction.response.edit_message(
-                content="The button has been disabled after 500 clicks.", view=self
+            self.correct_color = random.choice(["Red", "Green", "Blue"])
+            self.add_color_buttons()
+            await interaction.edit_original_response(
+                content=f"Pick **{self.correct_color}** to mine again!",
+                view=self,
             )
             return
 
+        # Run mining logic
+        t1 = time.perf_counter()
         (
             result,
             payout,
             loss,
             total_payout,
-            bonus,
+            level_bonus,
             new_balance,
             new_level,
             xp,
@@ -2004,13 +2080,20 @@ class MineAgainView(discord.ui.View):
             reward_message,
             pickaxe,
             pickaxe_bonus,
+            xp_gain,
+            balance_change,
         ) = await run_mining_logic(self.user, self.user_data)
+        t2 = time.perf_counter()
 
+        self.buffered_updates["xp_gain"] += xp_gain
+        self.buffered_updates["balance_change"] += balance_change
+
+        # Build message
         if payout > 0:
             msg = (
                 f"{interaction.user.mention} mined and found **{result}**, worth ${payout:,.2f}!\n"
                 f"💰 **Base Reward:** ${payout:,.2f}\n"
-                f"🎉 **Bonus from Level ({new_level}):** +${bonus:,.2f}\n"
+                f"🎉 **Bonus from Level ({new_level}):** +${level_bonus:,.2f}\n"
                 f"⛏️ **Pickaxe Used:** {pickaxe.title()} +${pickaxe_bonus:,.2f}\n"
                 f"💸 **Total Payout:** ${total_payout:,.2f}\n"
                 f"💰 New Balance: ${new_balance:,.2f}\n\n"
@@ -2029,13 +2112,68 @@ class MineAgainView(discord.ui.View):
             )
         msg += f"\n{reward_message}"
 
-        # Optionally update self.user_data if needed
-        self.user_data["balance"] = new_balance
-        self.user_data["mining_level"] = new_level
-        self.user_data["mining_xp"] = xp
-        self.user_data["next_level_xp"] = xp_needed
+        # Update user_data cache
+        self.user_data.update(
+            {
+                "balance": new_balance,
+                "mining_level": new_level,
+                "mining_xp": xp,
+                "next_level_xp": xp_needed,
+            }
+        )
 
         await interaction.edit_original_response(content=msg)
+
+        print(f"[Timing] Logic+DB: {t2 - t1:.4f}s")
+
+    def add_color_buttons(self):
+        if self.color_buttons_added:
+            return
+        self.color_buttons_added = True
+
+        for color, style in [
+            ("Green", discord.ButtonStyle.green),
+            ("Red", discord.ButtonStyle.red),
+            ("Blue", discord.ButtonStyle.blurple),
+        ]:
+            button = discord.ui.Button(label=color, style=style)
+            button.callback = lambda interaction, c=color: self.handle_color_choice(
+                interaction, c
+            )
+            self.add_item(button)
+
+    async def handle_color_choice(
+        self, interaction: discord.Interaction, chosen_color: str
+    ):
+        if interaction.user.id != self.user.id:
+            await interaction.response.send_message(
+                "You cannot use this button.", ephemeral=True
+            )
+            return
+
+        if chosen_color == self.correct_color:
+            self.click_count = 0
+            self.captcha = False
+            self.click_threshold += 200
+            self.correct_color = None
+            self.color_buttons_added = False
+
+            # Remove color buttons
+            self.clear_items()
+            self.mine_again.disabled = False
+            self.add_item(self.mine_again)
+
+            await self.message.edit(
+                content="✅ Correct! You can mine again.",
+                view=self,
+            )
+        else:
+            for item in self.children:
+                if isinstance(item, discord.ui.Button):
+                    item.disabled = True
+            await self.message.edit(
+                content="❌ Wrong color! Cooldown Started", view=self
+            )
 
 
 async def run_fishing_logic(
@@ -2193,15 +2331,63 @@ async def run_fishing_logic(
         reward_message,
         fishing_rod,
         fishing_rod_bonus,
+        xp_gain,
+        balance_change,
     )
 
 
 class FishAgainView(discord.ui.View):
-    def __init__(self, user: discord.User):
+    def __init__(self, user: discord.User, fishing_sessions):
         super().__init__(timeout=300)
         self.user = user
         self.click_count = 0
-        self.user_data = get_user_data(user)  # Cache user data ONCE
+        self.user_data = get_user_data(user)  # Cached once
+        self.buffered_updates = {"xp_gain": 0, "balance_change": 0}
+        self._flush_task = asyncio.create_task(self.background_flusher())
+        self.fishing_sessions = fishing_sessions
+        self.color_buttons_added = False
+        self.captcha = False
+
+        self.click_threshold = random.randint(50, 75)
+        self.correct_color = None
+
+    async def on_timeout(self):
+        print(self.fishing_sessions)
+        self.fishing_sessions.remove(self.user.id)
+        self._flush_task.cancel()
+        for item in self.children:
+            if isinstance(item, discord.ui.Button):
+                item.disabled = True
+        await self.message.edit(
+            content="Fishing timed out/Cooldown Finished", view=self
+        )
+
+        try:
+            await self._flush_task
+        except asyncio.CancelledError:
+            pass
+        await self.flush_updates()
+
+    async def flush_updates(self):
+        if (
+            self.buffered_updates["xp_gain"] == 0
+            and self.buffered_updates["balance_change"] == 0
+        ):
+            return
+        update_user_fish_stats(  # You'll need to create this function if not present
+            self.user,
+            self.buffered_updates["xp_gain"],
+            self.buffered_updates["balance_change"],
+        )
+        self.buffered_updates = {"xp_gain": 0, "balance_change": 0}
+
+    async def background_flusher(self):
+        try:
+            while not self.is_finished():
+                await asyncio.sleep(10)
+                await self.flush_updates()
+        except asyncio.CancelledError:
+            pass
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.user.id:
@@ -2215,16 +2401,23 @@ class FishAgainView(discord.ui.View):
     async def fish_again(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
+        if self.captcha:
+            return
         await interaction.response.defer()
         self.click_count += 1
 
-        if self.click_count >= 500:
+        if self.click_count >= self.click_threshold:
             button.disabled = True
-            await interaction.response.edit_message(
-                content="The button has been disabled after 500 casts.", view=self
+            self.captcha = True
+            self.correct_color = random.choice(["Red", "Green", "Blue"])
+            self.add_color_buttons()
+            await interaction.edit_original_response(
+                content=f"Pick **{self.correct_color}** to fish again!",
+                view=self,
             )
             return
 
+        # Run fishing logic
         (
             result,
             payout,
@@ -2238,9 +2431,14 @@ class FishAgainView(discord.ui.View):
             reward_message,
             fishing_rod,
             fishing_rod_bonus,
+            xp_gain,
+            balance_change,
         ) = await run_fishing_logic(self.user, self.user_data)
 
-        # Construct the message for the user based on payout, loss, or no gain
+        self.buffered_updates["xp_gain"] += xp_gain
+        self.buffered_updates["balance_change"] += balance_change
+
+        # Build message
         if payout > 0:
             msg = (
                 f"{interaction.user.mention} caught **{result}**, worth ${payout:,.2f}!\n"
@@ -2264,7 +2462,66 @@ class FishAgainView(discord.ui.View):
             )
         msg += f"\n{reward_message}"
 
+        self.user_data.update(
+            {
+                "balance": new_balance,
+                "fishing_level": new_level,
+                "fishing_xp": xp,
+                "fishing_next_level_xp": xp_needed,
+            }
+        )
+
         await interaction.edit_original_response(content=msg)
+
+    def add_color_buttons(self):
+        if self.color_buttons_added:
+            return
+        self.color_buttons_added = True
+
+        for color, style in [
+            ("Green", discord.ButtonStyle.green),
+            ("Red", discord.ButtonStyle.red),
+            ("Blue", discord.ButtonStyle.blurple),
+        ]:
+            button = discord.ui.Button(label=color, style=style)
+            button.callback = lambda interaction, c=color: self.handle_color_choice(
+                interaction, c
+            )
+            self.add_item(button)
+
+    async def handle_color_choice(
+        self, interaction: discord.Interaction, chosen_color: str
+    ):
+        if interaction.user.id != self.user.id:
+            await interaction.response.send_message(
+                "You cannot use this button.", ephemeral=True
+            )
+            return
+
+        if chosen_color == self.correct_color:
+            self.captcha = False
+            self.click_count = 0
+            self.click_threshold += 200
+            self.correct_color = None
+            self.color_buttons_added = False
+
+            # Remove color buttons
+            self.clear_items()
+            self.fish_again.disabled = False
+            self.add_item(self.fish_again)
+
+            await self.message.edit(
+                content="✅ Correct! You can fish again.",
+                view=self,
+            )
+        else:
+            for item in self.children:
+                if isinstance(item, discord.ui.Button):
+                    item.disabled = True
+            await self.message.edit(
+                content="❌ Wrong color! Cooldown Started",
+                view=self,
+            )
 
 
 class HighLowView(View):

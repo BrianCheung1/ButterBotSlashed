@@ -43,6 +43,8 @@ class MyBot(commands.Bot):
         print(f"Logged in as {self.user} (ID: {self.user.id})")
         print(f"Ping: {round(self.latency * 1000)} ms")
         print("------")
+        self.tree.clear_commands(guild=None)
+        await self.tree.sync()
 
 
 # Initialize and run the bot with error handling

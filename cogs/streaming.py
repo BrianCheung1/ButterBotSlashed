@@ -47,7 +47,8 @@ class Streaming(commands.Cog):
                     CREATE TABLE IF NOT EXISTS movies (
                         id INTEGER PRIMARY KEY,
                         name TEXT NOT NULL UNIQUE,
-                        link TEXT NOT NULL UNIQUE
+                        link TEXT NOT NULL UNIQUE,
+                        added_by TEXT
                     )
                 """
                 )

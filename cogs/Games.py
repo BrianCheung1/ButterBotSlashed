@@ -657,156 +657,6 @@ class BlackjackButton(discord.ui.View):
         await interaction.response.edit_message(embed=self.embed, view=self)
 
 
-class FightButton(discord.ui.View):
-    def __init__(self, interaction: discord.Interaction, member: discord.Member):
-        super().__init__()
-        self.interaction = interaction
-        self.member = member
-        self.embed = fight_helper(interaction, member)
-        self.player = 1
-        self.battle_log = ""
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if (
-            self.interaction.user.id != interaction.user.id
-            and self.member.id != interaction.user.id
-        ):
-            return False
-        return True
-
-    @discord.ui.button(label="Attack", style=discord.ButtonStyle.red)
-    async def attack(self, interaction: discord.Interaction, button: discord.ui.Button):
-        self.fight_again.disabled = True
-        await interaction.response.defer(thinking=True)
-        player_damage = random.randint(10, 20)
-        enemy_damage = random.randint(10, 20)
-        if interaction.user.id == self.interaction.user.id and self.player == 1:
-            # self.embed.set_field_at(index=1, name=f'{self.embed.fields[1].name}', value=f'{int(self.embed.fields[1].value)-damage}')
-            if self.member.bot:
-                player_health = int(self.embed.fields[0].value) - enemy_damage
-                enemy_health = int(self.embed.fields[1].value) - player_damage
-                self.player = 1
-                if enemy_health <= 0 and player_health > 0:
-                    content = f"{self.interaction.user.mention} wins $100\n"
-                    enemy_health = 0
-                    prev_balance, balance = balance_of_player(self.interaction.user)
-                    balance += 100
-                    collection.update_one(
-                        {"_id": self.interaction.user.id},
-                        {"$set": {"balance": balance}},
-                    )
-                    self.attack.disabled = True
-                    self.fight_again.disabled = False
-                elif player_health <= 0 and enemy_health > 0:
-                    content = f"{self.member.mention} wins\n"
-                    player_health = 0
-                    self.attack.disabled = True
-                    self.fight_again.disabled = False
-                elif player_health <= 0 and enemy_health <= 0:
-                    content = "it's a tie\n"
-                    player_health = 0
-                    enemy_damage = 0
-                    self.attack.disabled = True
-                    self.fight_again.disabled = False
-                else:
-                    self.battle_log += f"{self.interaction.user.mention} did {player_damage} damage\n{self.member.mention} did {enemy_damage} damage\n"
-                    content = f"It is now {self.interaction.user.mention}'s turn\n"
-
-                self.embed.set_field_at(
-                    index=0,
-                    name=f"{self.embed.fields[0].name}",
-                    value=f"{player_health}",
-                )
-                self.embed.set_field_at(
-                    index=1,
-                    name=f"{self.embed.fields[1].name}",
-                    value=f"{enemy_health}",
-                )
-                content += self.battle_log
-                await interaction.followup.edit_message(
-                    message_id=interaction.message.id,
-                    content=content,
-                    embed=self.embed,
-                    view=self,
-                )
-            else:
-                self.player = 2
-                content = f"It is now {self.member.mention}'s turn\n"
-                content += self.battle_log
-                await interaction.followup.edit_message(
-                    message_id=interaction.message.id,
-                    content=content,
-                    embed=self.embed,
-                    view=self,
-                )
-        elif interaction.user.id == self.member.id and self.player == 2:
-            player_health = int(self.embed.fields[0].value) - enemy_damage
-            enemy_health = int(self.embed.fields[1].value) - player_damage
-            self.player = 1
-            if enemy_health <= 0 and player_health > 0:
-                content = f"{self.interaction.user.mention} wins $100\n"
-                enemy_health = 0
-                prev_balance, balance = balance_of_player(self.interaction.user)
-                balance += 100
-                collection.update_one(
-                    {"_id": self.interaction.user.id}, {"$set": {"balance": balance}}
-                )
-                self.attack.disabled = True
-                self.fight_again.disabled = False
-            elif player_health <= 0 and enemy_health > 0:
-                content = f"{self.member.mention} wins $100\n"
-                player_health = 0
-                prev_balance, balance = balance_of_player(self.member)
-                balance += 100
-                collection.update_one(
-                    {"_id": self.member.id}, {"$set": {"balance": balance}}
-                )
-                self.attack.disabled = True
-                self.fight_again.disabled = False
-            elif player_health <= 0 and enemy_health <= 0:
-                content = "it's a tie\n"
-                player_health = 0
-                enemy_health = 0
-                self.attack.disabled = True
-                self.fight_again.disabled = False
-            else:
-                self.battle_log += f"{self.interaction.user.mention} did {player_damage} damage\n{self.member.mention} did {enemy_damage} damage\n"
-                content = f"It is now {self.interaction.user.mention}'s turn\n"
-
-            self.embed.set_field_at(
-                index=0, name=f"{self.embed.fields[0].name}", value=f"{player_health}"
-            )
-            self.embed.set_field_at(
-                index=1, name=f"{self.embed.fields[1].name}", value=f"{enemy_health}"
-            )
-            content += self.battle_log
-            await interaction.followup.edit_message(
-                message_id=interaction.message.id,
-                content=content,
-                embed=self.embed,
-                view=self,
-            )
-
-    # @discord.ui.button(label="Defend", style=discord.ButtonStyle.red)
-    # async def defend(self, interaction: discord.Interaction, button: discord.ui.Button):
-    #     await interaction.response.defer()
-    #     self.embed.set_field_at(index=1, name=f'{self.embed.fields[1].name}', value=f'{int(self.embed.fields[1].value)-5}')
-    #     await interaction.followup.edit_message(message_id=interaction.message.id, embed=self.embed, view=self)
-
-    @discord.ui.button(label="Fight Again", style=discord.ButtonStyle.blurple)
-    async def fight_again(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ):
-        await interaction.response.defer(thinking=True)
-        content = f"It is {self.interaction.user.mention} turn"
-        await interaction.followup.edit_message(
-            message_id=interaction.message.id,
-            content=content,
-            embed=fight_helper(interaction, self.member),
-            view=self,
-        )
-
-
 class SlotsButton(discord.ui.View):
     def __init__(
         self,
@@ -979,8 +829,11 @@ def slots_helper(
         elif max_count == 4:
             payout_amount = amount * 5
             desc = "4 special fruits"
+        elif max_count == 9:
+            payout_amount = amount * 999
+            desc = "MAX WIN BABY"
         elif max_count >= 5:
-            payout_amount = amount * 25
+            payout_amount = amount * 35
             desc = "5+ special fruits"
         else:
             payout_amount = -amount

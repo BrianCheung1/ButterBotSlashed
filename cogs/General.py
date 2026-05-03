@@ -4,6 +4,7 @@ import discord
 from discord import ButtonStyle, app_commands
 from discord.ext import commands
 from discord.ui import Button, View
+import random
 
 
 class General(commands.Cog):
@@ -33,6 +34,43 @@ class General(commands.Cog):
         await interaction.response.send_message(
             f"Google Result for: `{query}`", view=Google(query)
         )
+
+    @app_commands.command(name="8ball")
+    async def eight_ball(self, interaction: discord.Interaction, question: str):
+        """Returns a random 8ball response"""
+        responses = [
+            # Yes-style responses
+            "Absolutely yes!",
+            "You bet!",
+            "Without a doubt!",
+            "Heck yes!",
+            "Yes, unless the world ends first.",
+            "Sure, why not?",
+            "Yup, it's in the cards.",
+            "As certain as taxes.",
+            "Affirmative, captain!",
+            "Yes, and you didn't even need to shake me.",
+            # No-style responses
+            "Nope. Not today, not tomorrow.",
+            "Absolutely not!",
+            "No, and I'm judging you for asking.",
+            "Negative, ghost rider.",
+            "Nah, not a chance.",
+            "Not in this universe.",
+            "No, unless pigs start flying.",
+            "Denied. Try again later.",
+            "Hard no.",
+            "Ask someone else... preferably not me.",
+            # Maybe / unsure
+            "Ask again later.",
+            "I don't know, maybe?",
+            "Could be... but I'm not confident.",
+            "The answer is fuzzy. Try cleaning your screen.",
+            "That's above my pay grade.",
+        ]
+
+        response = random.choice(responses)
+        await interaction.response.send_message(response)
 
 
 # Define a simple View that gives us a google link button.
